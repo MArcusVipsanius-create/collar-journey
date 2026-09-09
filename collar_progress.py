@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import html
 import json
+import logging
 import re
 import sqlite3
 import uuid
@@ -3592,18 +3593,24 @@ div[data-testid="stMarkdown"]:has(.cj-quest-done-row) + div[data-testid="stButto
 div[data-testid="stMarkdown"]:has(.cj-quest-done-row.selected) + div[data-testid="stButton"] button {
     border-radius: 0; border-bottom: none;
 }
+.cj-quest-panel-open {
+    scroll-margin-top: 5rem;
+}
+.cj-quest-panel-box {
+    border: 2px solid var(--dl-orange);
+    border-radius: 14px;
+    padding: 0.65rem 0.75rem 0.45rem;
+    margin: 0.35rem 0 0.55rem;
+    background: linear-gradient(180deg, rgba(255,248,225,0.45) 0%, #fff 70%);
+    box-shadow: var(--dl-shadow-sm);
+}
+.cj-quest-panel-box.done {
+    border-color: rgba(88,204,2,0.55);
+    background: linear-gradient(180deg, rgba(240,255,228,0.55) 0%, #fff 70%);
+}
 .cj-quest-panel-title {
-    font-family: Fredoka, sans-serif; font-size: 0.92rem; font-weight: 700;
-    color: var(--dl-text); margin: 0 0 0.15rem;
-}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(#cj-open-quest-panel) {
-    margin: 0.25rem 0 0.45rem !important;
-    scroll-margin-top: 4.5rem;
-}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(#cj-open-quest-panel) > div {
-    border-color: var(--dl-orange) !important;
-    border-radius: 14px !important;
-    background: linear-gradient(180deg, rgba(255,248,225,0.35) 0%, #fff 55%) !important;
+    font-family: Fredoka, sans-serif; font-size: 0.95rem; font-weight: 700;
+    color: var(--dl-text); margin: 0 0 0.2rem;
 }
 
 .cj-polaroid {
@@ -9404,20 +9411,24 @@ def _render_inline_quest_panel(
     """Expand quest inputs directly under the tapped tile row."""
     is_earned = row["status"] == "earned"
     lead = "✅" if is_earned else "🎯"
-    with st.container(border=True):
-        st.markdown(
-            f'<div id="cj-open-quest-panel" class="cj-quest-panel-title">{lead} {row["title"]}</div>',
-            unsafe_allow_html=True,
+    box_cls = "cj-quest-panel-box done" if is_earned else "cj-quest-panel-box"
+    st.markdown(
+        f"""
+<div id="cj-open-quest-panel" class="cj-quest-panel-open {box_cls}">
+  <div class="cj-quest-panel-title">{lead} {html.escape(str(row["title"]))}</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+    st.caption(str(row["description"]))
+    if is_earned:
+        _render_quest_done_panel(row, day_num, key_prefix, partners_df)
+    elif not maybe_render_quest_quick_complete(
+        row, day_num, key_prefix, partners_df, encounters_df
+    ):
+        _render_quest_log_panel(
+            row, df, day_num, key_prefix, partners_df, encounters_df, sub_pool
         )
-        st.caption(str(row["description"]))
-        if is_earned:
-            _render_quest_done_panel(row, day_num, key_prefix, partners_df)
-        elif not maybe_render_quest_quick_complete(
-            row, day_num, key_prefix, partners_df, encounters_df
-        ):
-            _render_quest_log_panel(
-                row, df, day_num, key_prefix, partners_df, encounters_df, sub_pool
-            )
 
 
 def _quest_grid_cols(count: int) -> int:
@@ -9425,11 +9436,15 @@ def _quest_grid_cols(count: int) -> int:
         return 1
     if count == 2:
         return 2
-    if count <= 4:
-        return 2
-    if count >= 8:
-        return 4
     return 3
+
+
+def _streamlit_columns(count: int) -> list:
+    """Compat wrapper — older Streamlit lacks gap= on st.columns."""
+    try:
+        return st.columns(count, gap="small")
+    except TypeError:
+        return st.columns(count)
 
 
 def _render_quest_tile_cell(
@@ -9482,7 +9497,6 @@ def _render_quest_open_panel(
             encounters_df,
             sub_pool,
         )
-        scroll_open_quest_panel_into_view()
     else:
         st.warning("That quest is no longer available — pick another tile.")
 
@@ -9529,7 +9543,7 @@ def _render_quest_tile_grid(
     open_id = str(open_quest) if open_quest else None
     for i in range(0, len(keys), cols_per_row):
         chunk = keys[i : i + cols_per_row]
-        cols = st.columns(len(chunk), gap="small")
+        cols = _streamlit_columns(len(chunk))
         for col, key in zip(cols, chunk):
             with col:
                 row = day_df[day_df["activity_key"] == key].iloc[0]
@@ -9556,6 +9570,33 @@ def render_day_quest_nav(
     sub_pool: pd.DataFrame | None = None,
 ) -> None:
     """Pending quests as photo tiles by time of day; completed quests collapsed below."""
+    try:
+        _render_day_quest_nav_body(
+            day_df,
+            day_num,
+            key_prefix,
+            df,
+            partners_df,
+            encounters_df,
+            sub_pool,
+        )
+    except Exception:
+        logging.exception("render_day_quest_nav failed for day %s", day_num)
+        st.error("Quest list failed to load. Refresh the page — if it keeps happening, note which day.")
+        if st.button("Clear stuck quest panel", key=f"{key_prefix}_clear_open_{day_num}"):
+            st.session_state.pop(f"{key_prefix}_open_quest_{day_num}", None)
+            st.rerun()
+
+
+def _render_day_quest_nav_body(
+    day_df: pd.DataFrame,
+    day_num: int,
+    key_prefix: str,
+    df: pd.DataFrame | None,
+    partners_df: pd.DataFrame | None,
+    encounters_df: pd.DataFrame | None,
+    sub_pool: pd.DataFrame | None,
+) -> None:
     open_key = f"{key_prefix}_open_quest_{day_num}"
     quest_keys = _sorted_quest_keys(day_df)
     sync_open_quest_state(key_prefix, day_num, quest_keys)
