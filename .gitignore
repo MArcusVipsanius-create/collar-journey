@@ -7,6 +7,9 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Private journey photos — never commit
+collar_progress_data/uploads/
+
 # Large / unrelated local artifacts — not needed for Collar Journey deploy
 dist/
 _recovered/

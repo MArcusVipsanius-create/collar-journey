@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import html
 import json
 import re
 import sqlite3
@@ -22,8 +23,11 @@ APP_TAGLINE = "Cap d'Agde · 14 days · earned, not given."
 DATA_DIR = Path(__file__).resolve().parent / "collar_progress_data"
 VENUE_IMAGES_DIR = DATA_DIR / "venue_images"
 BRAND_DIR = DATA_DIR / "brand"
+UPLOADS_DIR = DATA_DIR / "uploads"
 DB_PATH = DATA_DIR / "cap_collar_journey.sqlite3"
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+ALLOWED_UPLOAD_EXT = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 TOTAL_DAYS = 14
 
 BONUS_COKE_POINTS = 5
@@ -273,19 +277,42 @@ _CALENDAR_HERO_BY_DAY: dict[int, str] = {
 }
 
 
-@lru_cache(maxsize=32)
-def venue_image_data_uri(filename: str, mtime_ns: int) -> str | None:
-    path = VENUE_IMAGES_DIR / filename
-    if not path.is_file() or path.stat().st_size < 400:
-        return None
-    mime = {
+def _mime_for_ext(ext: str) -> str:
+    return {
         ".png": "image/png",
         ".jpg": "image/jpeg",
         ".jpeg": "image/jpeg",
         ".webp": "image/webp",
-    }.get(path.suffix.lower(), "image/png")
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f"data:{mime};base64,{encoded}"
+        ".gif": "image/gif",
+    }.get(ext.lower(), "image/jpeg")
+
+
+def _bytes_to_data_uri(raw: bytes, ext: str, *, max_bytes: int = 12 * 1024 * 1024) -> str | None:
+    if not raw or len(raw) > max_bytes:
+        return None
+    mime = _mime_for_ext(ext)
+    return f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
+
+
+def _path_to_data_uri(path: Path, *, max_bytes: int = 12 * 1024 * 1024) -> str | None:
+    if not path.is_file():
+        return None
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return None
+    if size < 1 or size > max_bytes:
+        return None
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+    return _bytes_to_data_uri(raw, path.suffix, max_bytes=max_bytes)
+
+
+@lru_cache(maxsize=256)
+def venue_image_data_uri(filename: str, mtime_ns: int) -> str | None:
+    return _path_to_data_uri(VENUE_IMAGES_DIR / filename)
 
 
 def _venue_image_uri(filename: str) -> str | None:
@@ -295,19 +322,9 @@ def _venue_image_uri(filename: str) -> str | None:
     return venue_image_data_uri(filename, path.stat().st_mtime_ns)
 
 
-@lru_cache(maxsize=16)
+@lru_cache(maxsize=32)
 def brand_image_data_uri(filename: str, mtime_ns: int) -> str | None:
-    path = BRAND_DIR / filename
-    if not path.is_file() or path.stat().st_size < 400:
-        return None
-    mime = {
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".webp": "image/webp",
-    }.get(path.suffix.lower(), "image/png")
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f"data:{mime};base64,{encoded}"
+    return _path_to_data_uri(BRAND_DIR / filename)
 
 
 def _brand_image_uri(filename: str) -> str | None:
@@ -877,22 +894,27 @@ def venue_scene_open_html(location: str, row=None) -> str:
     if image:
         uri = _venue_image_uri(str(image))
         if uri:
-            bg = f'<div class="cj-quest-scene-bg" style="background-image:url(\'{uri}\');"></div>'
+            bg = f'<div class="cj-quest-scene-bg"><img src="{uri}" alt="" /></div>'
     return f'<div class="cj-quest-scene">{bg}<div class="cj-quest-scene-overlay"></div><div class="cj-quest-scene-inner">'
 
 
 def location_image_uri(location: str) -> str | None:
     meta = LOCATIONS.get(location, {})
     image = meta.get("image")
-    if not image:
-        return None
-    return _venue_image_uri(str(image))
+    if image:
+        uri = _venue_image_uri(str(image))
+        if uri:
+            return uri
+    challenge = challenge_image_for_location(location)
+    if challenge:
+        return _venue_image_uri(challenge)
+    return None
 
 
 def venue_photo_layer_html(uri: str, extra_cls: str = "") -> str:
-    return (
-        f'<div class="cj-photo-layer {extra_cls}" style="background-image:url(\'{uri}\');"></div>'
-    )
+    if not uri:
+        return ""
+    return f'<div class="cj-photo-layer {extra_cls}"><img src="{uri}" alt="" /></div>'
 
 
 def day_venue_banner_html(df: pd.DataFrame, day_num: int, title: str = "") -> str:
@@ -925,6 +947,11 @@ def day_venue_banner_html(df: pd.DataFrame, day_num: int, title: str = "") -> st
 
 
 def quest_pick_image_uri(row) -> str | None:
+    img_file = str(row.get("image_file") or "").strip()
+    if img_file:
+        uri = _venue_image_uri(img_file)
+        if uri:
+            return uri
     meta = activity_meta(row)
     img = meta.get("image")
     if img:
@@ -2993,10 +3020,14 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
 }
 .cj-quest-scene-bg {
     position: absolute; inset: 0;
-    background-size: cover; background-position: center;
+    overflow: hidden;
     filter: blur(2px) saturate(1.15);
     transform: scale(1.06);
     animation: cjKenBurns 18s ease-in-out infinite alternate;
+}
+.cj-quest-scene-bg img {
+    width: 100%; height: 100%; object-fit: cover; object-position: center;
+    display: block;
 }
 .cj-quest-scene-bg.solid { filter: none; transform: none; animation: none; }
 .cj-quest-scene-overlay {
@@ -3014,8 +3045,12 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
 /* ── Photo banners & mosaic ── */
 .cj-photo-layer {
     position: absolute; inset: 0;
-    background-size: cover; background-position: center;
+    overflow: hidden;
     filter: saturate(1.08);
+}
+.cj-photo-layer img {
+    width: 100%; height: 100%; object-fit: cover; object-position: center top;
+    display: block;
 }
 .cj-photo-layer.ken-burns { animation: cjKenBurns 16s ease-in-out infinite alternate; }
 .cj-day-banner {
@@ -3074,8 +3109,13 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
 
 .cj-cal-cell.has-photo { overflow: hidden; }
 .cj-cal-photo-bg {
-    position: absolute; inset: 0; background-size: cover; background-position: center top;
+    position: absolute; inset: 0;
+    overflow: hidden;
     opacity: 0.28; filter: saturate(1.1);
+}
+.cj-cal-photo-bg img {
+    width: 100%; height: 100%; object-fit: cover; object-position: center top;
+    display: block;
 }
 .cj-cal-cell.met .cj-cal-photo-bg, .cj-cal-cell.exceeded .cj-cal-photo-bg { opacity: 0.38; }
 .cj-cal-photo-scrim {
@@ -3254,8 +3294,13 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
 .cj-rich-cal-day.met { border-color: var(--dl-green-dark); }
 .cj-rich-cal-day.exceeded { border-color: var(--dl-yellow-dark); }
 .cj-rich-cal-bg {
-    position: absolute; inset: 0; background-size: cover; background-position: center top;
+    position: absolute; inset: 0;
+    overflow: hidden;
     filter: saturate(1.15);
+}
+.cj-rich-cal-bg img {
+    width: 100%; height: 100%; object-fit: cover; object-position: center top;
+    display: block;
 }
 .cj-rich-cal-scrim {
     position: absolute; inset: 0;
@@ -3390,8 +3435,13 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
     border: 2px solid #3d2548; box-shadow: 0 6px 20px rgba(0,0,0,0.15);
 }
 .cj-stats-hero-layer {
-    position: absolute; inset: 0; background-size: cover; background-position: center;
+    position: absolute; inset: 0;
+    overflow: hidden;
     opacity: 0.55;
+}
+.cj-stats-hero-layer img {
+    width: 100%; height: 100%; object-fit: cover; object-position: center;
+    display: block;
 }
 .cj-stats-hero-scrim {
     position: absolute; inset: 0;
@@ -3642,6 +3692,76 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
     .cj-rich-cal-day { min-height: 96px; }
     .nice-stat-grid { grid-template-columns: 1fr 1fr; }
 }
+.cj-media-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+    gap: 0.45rem;
+    margin: 0.5rem 0;
+}
+.cj-media-thumb {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    aspect-ratio: 1;
+    border: 2px solid var(--dl-border);
+    box-shadow: var(--dl-shadow-sm);
+    background: #f0f0f0;
+}
+.cj-media-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.cj-slideshow-wrap {
+    background: #1a1020;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 2px solid #3d2548;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.25);
+    margin: 0.75rem 0 1rem;
+}
+.cj-slideshow-stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/3;
+    background: #0f0a14;
+}
+.cj-slideshow-stage img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+.cj-slideshow-caption {
+    padding: 0.65rem 0.85rem;
+    color: #ece4f0;
+    font-weight: 700;
+    font-size: 0.88rem;
+    min-height: 2.4rem;
+}
+.cj-slideshow-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0.65rem 0.75rem;
+    gap: 0.5rem;
+}
+.cj-slideshow-btn {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.18);
+    color: white;
+    border-radius: 999px;
+    padding: 0.45rem 0.85rem;
+    font-weight: 800;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+.cj-slideshow-counter {
+    color: #b8a8c4;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
 </style>
 """
 
@@ -3761,6 +3881,19 @@ def _ensure_schema_migrations(cur):
             dismissed_at TEXT NOT NULL,
             PRIMARY KEY (activity_key, preset_id)
         );
+        CREATE TABLE IF NOT EXISTS journey_media (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_id TEXT NOT NULL UNIQUE,
+            kind TEXT NOT NULL,
+            activity_key TEXT NOT NULL DEFAULT '',
+            partner_id INTEGER,
+            location TEXT NOT NULL DEFAULT '',
+            day_num INTEGER,
+            caption TEXT NOT NULL DEFAULT '',
+            filename TEXT NOT NULL,
+            original_name TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        );
         """
     )
     for col_ddl in (
@@ -3860,7 +3993,7 @@ def save_activity_image(upload, activity_key: str) -> str | None:
     fname = f"act_{activity_key}_{stem}{ext}"
     VENUE_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     (VENUE_IMAGES_DIR / fname).write_bytes(upload.getbuffer())
-    venue_image_data_uri.cache_clear()
+    clear_image_caches()
     return fname
 
 
@@ -4156,14 +4289,26 @@ def render_activity_manager(df: pd.DataFrame):
         prev_cols = st.columns([1, 2])
         with prev_cols[0]:
             img = str(row.get("image_file") or meta.get("image") or "")
-            uri = _venue_image_uri(img) if img else None
-            if uri:
+            img_path = VENUE_IMAGES_DIR / img if img else None
+            if img_path and img_path.is_file():
+                st.image(str(img_path), use_container_width=True)
+            elif img:
+                uri = _venue_image_uri(img)
+                if uri:
+                    st.markdown(
+                        f'<img src="{uri}" style="width:100%;border-radius:12px;border:2px solid #ddd;" />',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        f"<div style='font-size:3rem;text-align:center'>{meta.get('icon', '📍')}</div>",
+                        unsafe_allow_html=True,
+                    )
+            else:
                 st.markdown(
-                    f'<img src="{uri}" style="width:100%;border-radius:12px;border:2px solid #ddd;" />',
+                    f"<div style='font-size:3rem;text-align:center'>{meta.get('icon', '📍')}</div>",
                     unsafe_allow_html=True,
                 )
-            else:
-                st.markdown(f"<div style='font-size:3rem;text-align:center'>{meta.get('icon', '📍')}</div>", unsafe_allow_html=True)
         with prev_cols[1]:
             st.markdown(f"**{row['title']}**")
             st.caption(
@@ -5186,6 +5331,313 @@ def load_partners_df() -> pd.DataFrame:
     return df
 
 
+def media_file_path(stored_filename: str) -> Path | None:
+    path = UPLOADS_DIR / stored_filename
+    return path if path.is_file() else None
+
+
+def media_data_uri(stored_filename: str) -> str | None:
+    path = media_file_path(stored_filename)
+    if not path:
+        return None
+    return _path_to_data_uri(path, max_bytes=MAX_UPLOAD_BYTES)
+
+
+def clear_image_caches() -> None:
+    venue_image_data_uri.cache_clear()
+    brand_image_data_uri.cache_clear()
+
+
+def load_journey_media_df() -> pd.DataFrame:
+    conn = get_conn()
+    try:
+        df = pd.read_sql_query(
+            "SELECT * FROM journey_media ORDER BY created_at, id",
+            conn,
+        )
+    except sqlite3.OperationalError:
+        df = pd.DataFrame()
+    conn.close()
+    return df
+
+
+def filter_journey_media(
+    *,
+    kind: str | None = None,
+    activity_key: str | None = None,
+    partner_id: int | None = None,
+    location: str | None = None,
+    day_num: int | None = None,
+) -> pd.DataFrame:
+    df = load_journey_media_df()
+    if df.empty:
+        return df
+    if kind:
+        df = df[df["kind"] == kind]
+    if activity_key:
+        df = df[df["activity_key"] == activity_key]
+    if partner_id is not None:
+        df = df[df["partner_id"] == partner_id]
+    if location:
+        df = df[df["location"] == location]
+    if day_num is not None:
+        df = df[df["day_num"] == day_num]
+    return df
+
+
+def save_journey_media(
+    file_bytes: bytes,
+    original_name: str,
+    *,
+    kind: str,
+    activity_key: str = "",
+    partner_id: int | None = None,
+    location: str = "",
+    day_num: int | None = None,
+    caption: str = "",
+) -> tuple[bool, str]:
+    ext = Path(original_name).suffix.lower()
+    if ext not in ALLOWED_UPLOAD_EXT:
+        return False, "Use JPG, PNG, WEBP, or GIF."
+    if not file_bytes:
+        return False, "Empty file."
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        return False, f"Max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB per photo."
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    media_id = uuid.uuid4().hex
+    filename = f"{media_id}{ext}"
+    try:
+        (UPLOADS_DIR / filename).write_bytes(file_bytes)
+    except OSError:
+        return False, "Could not save photo."
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO journey_media(
+            media_id, kind, activity_key, partner_id, location, day_num,
+            caption, filename, original_name, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            media_id,
+            kind,
+            activity_key or "",
+            partner_id,
+            location or "",
+            day_num,
+            caption.strip(),
+            filename,
+            original_name,
+            datetime.now().isoformat(timespec="seconds"),
+        ),
+    )
+    conn.commit()
+    conn.close()
+    clear_image_caches()
+    return True, media_id
+
+
+def delete_journey_media(media_id: str) -> None:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT filename FROM journey_media WHERE media_id = ?",
+        (media_id,),
+    ).fetchone()
+    if row:
+        path = UPLOADS_DIR / row["filename"]
+        if path.is_file():
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        conn.execute("DELETE FROM journey_media WHERE media_id = ?", (media_id,))
+        conn.commit()
+    conn.close()
+
+
+def media_slide_label(
+    row: pd.Series,
+    df: pd.DataFrame,
+    partners_df: pd.DataFrame,
+    settings: dict,
+) -> str:
+    caption = str(row.get("caption") or "").strip()
+    kind = str(row.get("kind") or "")
+    if kind == "quest" and row.get("activity_key"):
+        act = activity_row(df, str(row["activity_key"]))
+        if act is not None:
+            base = f"Day {int(act['day_num'])} · {act['title']}"
+            return f"{base} — {caption}" if caption else base
+    if kind == "partner" and pd.notna(row.get("partner_id")):
+        prow = partner_row(partners_df, int(row["partner_id"]))
+        if prow is not None:
+            base = f"👤 {prow['display_name']}"
+            return f"{base} — {caption}" if caption else base
+    if kind == "day" and pd.notna(row.get("day_num")):
+        d = int(row["day_num"])
+        meta = day_plan_meta(d)
+        when = journey_date(settings, d).strftime("%b %d")
+        base = f"Day {d} · {meta['title']} · {when}"
+        return f"{base} — {caption}" if caption else base
+    if kind == "location" and row.get("location"):
+        base = f"📍 {location_person_label(str(row['location']))}"
+        if pd.notna(row.get("day_num")):
+            base = f"Day {int(row['day_num'])} · {base}"
+        return f"{base} — {caption}" if caption else base
+    return caption or "Journey memory"
+
+
+def render_media_thumbnail_grid(
+    media_df: pd.DataFrame,
+    key_prefix: str,
+    *,
+    deletable: bool = True,
+) -> None:
+    if media_df.empty:
+        return
+    valid_rows = [
+        row
+        for _, row in media_df.iterrows()
+        if media_file_path(str(row["filename"])) is not None
+    ]
+    if not valid_rows:
+        st.caption("Photos listed but image files are missing on this device.")
+        return
+    cols = st.columns(min(4, len(valid_rows)))
+    for i, row in enumerate(valid_rows):
+        path = media_file_path(str(row["filename"]))
+        if not path:
+            continue
+        with cols[i % len(cols)]:
+            st.image(str(path), use_container_width=True)
+            cap = str(row.get("caption") or row.get("original_name") or "")
+            if cap:
+                st.caption(cap if len(cap) <= 40 else cap[:38] + "…")
+            if deletable and st.button(
+                "🗑 Remove",
+                key=f"{key_prefix}_del_media_{row['media_id']}",
+                use_container_width=True,
+            ):
+                delete_journey_media(str(row["media_id"]))
+                st.toast("Photo removed")
+                st.rerun()
+
+
+def render_media_upload_section(
+    key_prefix: str,
+    *,
+    kind: str,
+    activity_key: str = "",
+    partner_id: int | None = None,
+    location: str = "",
+    day_num: int | None = None,
+    label: str = "📸 Add photos",
+    compact: bool = False,
+) -> None:
+    scope_key = f"{kind}_{activity_key}_{partner_id}_{location}_{day_num}"
+    existing = filter_journey_media(
+        kind=kind,
+        activity_key=activity_key or None,
+        partner_id=partner_id,
+        location=location or None,
+        day_num=day_num,
+    )
+    if not existing.empty:
+        render_media_thumbnail_grid(existing, f"{key_prefix}_{scope_key}")
+    cap_key = f"{key_prefix}_media_cap_{scope_key}"
+    up_key = f"{key_prefix}_media_up_{scope_key}"
+    with st.expander(label, expanded=not compact and existing.empty):
+        caption = st.text_input("Caption (optional)", key=cap_key)
+        uploaded = st.file_uploader(
+            "Choose photo(s)",
+            type=["jpg", "jpeg", "png", "webp", "gif"],
+            accept_multiple_files=True,
+            key=up_key,
+            label_visibility="collapsed",
+        )
+        st.caption(
+            "JPG/PNG/WEBP/GIF · up to 8 MB each · saved with your journey on this device. "
+            "Export or back up photos separately if you redeploy the app."
+        )
+        if uploaded and st.button(
+            "Save photos",
+            key=f"{key_prefix}_media_save_{scope_key}",
+            type="primary",
+            use_container_width=True,
+        ):
+            saved = 0
+            errors: list[str] = []
+            for file in uploaded:
+                ok, msg = save_journey_media(
+                    file.getvalue(),
+                    file.name,
+                    kind=kind,
+                    activity_key=activity_key,
+                    partner_id=partner_id,
+                    location=location,
+                    day_num=day_num,
+                    caption=caption,
+                )
+                if ok:
+                    saved += 1
+                else:
+                    errors.append(f"{file.name}: {msg}")
+            if saved:
+                st.toast(f"Saved {saved} photo{'s' if saved != 1 else ''} 📸")
+            if errors:
+                st.warning("Some photos were skipped: " + "; ".join(errors[:3]))
+            if saved:
+                st.rerun()
+
+
+def render_journey_slideshow(
+    df: pd.DataFrame,
+    partners_df: pd.DataFrame,
+    settings: dict,
+) -> None:
+    media = load_journey_media_df()
+    st.markdown("### 📸 Journey memories")
+    if media.empty:
+        st.info(
+            "Add photos on **Today** (quests & day shots), or under **Partners** — "
+            "they collect here as a slideshow you can replay anytime."
+        )
+        return
+    slides: list[dict] = []
+    for _, row in media.iterrows():
+        path = media_file_path(str(row["filename"]))
+        if not path:
+            continue
+        slides.append(
+            {
+                "filename": str(row["filename"]),
+                "label": media_slide_label(row, df, partners_df, settings),
+            }
+        )
+    if not slides:
+        st.warning("Photos were recorded but files are missing on this device.")
+        return
+    idx_key = "journey_slideshow_idx"
+    if idx_key not in st.session_state:
+        st.session_state[idx_key] = 0
+    idx = int(st.session_state[idx_key]) % len(slides)
+    slide = slides[idx]
+    path = media_file_path(slide["filename"])
+    st.caption(f"{len(slides)} photo{'s' if len(slides) != 1 else ''} · {idx + 1} of {len(slides)}")
+    if path:
+        st.image(str(path), use_container_width=True)
+    st.markdown(f"**{html.escape(slide['label'])}**")
+    prev_col, next_col = st.columns(2)
+    with prev_col:
+        if st.button("← Previous", key="slideshow_prev", use_container_width=True):
+            st.session_state[idx_key] = (idx - 1) % len(slides)
+            st.rerun()
+    with next_col:
+        if st.button("Next →", key="slideshow_next", use_container_width=True):
+            st.session_state[idx_key] = (idx + 1) % len(slides)
+            st.rerun()
+
+
 def load_encounters_df() -> pd.DataFrame:
     conn = get_conn()
     try:
@@ -6206,6 +6658,18 @@ def render_partners_tab(encounters: pd.DataFrame, partners: pd.DataFrame):
     )
     st.caption(f"Showing **{len(filtered)}** of **{len(encounters)}** encounters")
 
+    selected_partner_id = partner_opts[partner_label]
+    if selected_partner_id is not None:
+        prow = partner_row(partners, selected_partner_id)
+        if prow is not None:
+            render_media_upload_section(
+                "ptn",
+                kind="partner",
+                partner_id=int(selected_partner_id),
+                label=f"📸 Photos · {prow['display_name']}",
+                compact=True,
+            )
+
     tab_overview, tab_partner, tab_location, tab_activity, tab_log = st.tabs(
         ["📊 Overview", "👤 By partner", "📍 By location", "🎯 By activity", "📜 Full log"]
     )
@@ -6944,7 +7408,7 @@ def apply_pending_navigation(tab_labels: list[str]):
     if pending_day is not None:
         day = int(pending_day)
         st.session_state.quests_day_pick = day
-        st.session_state.cal_day_pick = day
+        _set_calendar_day(day, current_journey_day(load_settings()))
 
 
 def request_main_tab(tab_label: str, quests_day: int | None = None):
@@ -7207,9 +7671,16 @@ def _calendar_day_label(settings: dict, day_num: int) -> str:
 
 
 def _ensure_calendar_pick(journey_day: int) -> int:
-    if "cal_day_pick" not in st.session_state:
+    if not st.session_state.get("cal_day_custom"):
         st.session_state.cal_day_pick = journey_day
-    return int(st.session_state.cal_day_pick)
+        return journey_day
+    pick = int(st.session_state.get("cal_day_pick", journey_day))
+    return max(1, min(TOTAL_DAYS, pick))
+
+
+def _set_calendar_day(day_num: int, journey_day: int) -> None:
+    st.session_state.cal_day_pick = day_num
+    st.session_state.cal_day_custom = day_num != journey_day
 
 
 def render_nice_app_bar(
@@ -7273,22 +7744,21 @@ def rich_cal_day_card_html(
     if day_num == journey_day:
         css.append("today")
     sig_img = summary.get("signature_image")
-    bg_style = ""
+    bg_html = '<div class="cj-rich-cal-bg"></div>'
+    uri = None
     if sig_img:
         uri = _venue_image_uri(str(sig_img))
-        if uri:
-            bg_style = f"background-image:url('{uri}');"
     elif summary.get("signature_loc"):
         uri = location_image_uri(str(summary["signature_loc"]))
-        if uri:
-            bg_style = f"background-image:url('{uri}');"
+    if uri:
+        bg_html = f'<div class="cj-rich-cal-bg"><img src="{uri}" alt="" /></div>'
     icons = " ".join(summary.get("activity_icons", [])[:5])
     pending = " ".join(summary.get("pending_icons", [])[:2])
     icon_line = icons or pending or "·"
     pct = min(int(summary.get("pct", 0)), 100)
     return f"""
 <div class="{' '.join(css)}">
-  <div class="cj-rich-cal-bg" style="{bg_style}"></div>
+  {bg_html}
   <div class="cj-rich-cal-scrim"></div>
   <div class="cj-rich-cal-inner">
     <div class="cj-rich-cal-num">{cal_date.day}</div>
@@ -7364,11 +7834,15 @@ def render_stats_view(
     if not earned.empty:
         top_loc = str(earned["location"].value_counts().index[0])
         hero_uri = location_image_uri(top_loc)
-    hero_bg = f"background-image:url('{hero_uri}');" if hero_uri else ""
+    hero_layer = (
+        f'<div class="cj-stats-hero-layer"><img src="{hero_uri}" alt="" /></div>'
+        if hero_uri
+        else '<div class="cj-stats-hero-layer"></div>'
+    )
     st.markdown(
         f"""
 <div class="cj-stats-hero">
-  <div class="cj-stats-hero-layer" style="{hero_bg}"></div>
+  {hero_layer}
   <div class="cj-stats-hero-scrim"></div>
   <div class="cj-stats-hero-text">
     <h4>Your journey in numbers</h4>
@@ -7501,7 +7975,7 @@ def render_calendar_cell(
     if uri:
         css.append("has-photo")
         photo_layers = (
-            f"<div class='cj-cal-photo-bg' style=\"background-image:url('{uri}');\"></div>"
+            f"<div class='cj-cal-photo-bg'><img src='{uri}' alt='' /></div>"
             f"<div class='cj-cal-photo-scrim'></div>"
         )
 
@@ -7542,32 +8016,25 @@ def render_calendar_view(
         for d in range(1, TOTAL_DAYS + 1)
     ]
 
-    day_col, today_col = st.columns([5, 1])
-    with day_col:
-        pick = st.selectbox(
-            "Choose day",
-            list(range(1, TOTAL_DAYS + 1)),
-            index=view_day - 1,
-            format_func=lambda d: _calendar_day_label(settings, d),
-            key="cal_day_select",
-        )
-    with today_col:
-        st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
-        if st.button(
-            "Today",
-            key="cal_jump_today",
-            use_container_width=True,
-            disabled=(pick == journey_day),
-            type="primary" if pick == journey_day else "secondary",
-        ):
-            st.session_state.cal_day_pick = journey_day
-            st.rerun()
-    st.session_state.cal_day_pick = pick
-
+    pick = view_day
+    is_today = pick == journey_day
     summary = summaries[pick - 1]
     cal_date = journey_date(settings, pick)
+    day_title = day_plan_meta(pick)["title"]
 
-    st.caption(f"{start.strftime('%B %d')} – {end.strftime('%B %d, %Y')}")
+    if is_today:
+        st.markdown(f"### ⚡ Today · Day {pick} — {day_title}")
+        st.caption(cal_date.strftime("%A, %B %d"))
+    else:
+        back_col, title_col = st.columns([1, 3])
+        with back_col:
+            if st.button("← Today", key="cal_back_today", use_container_width=True):
+                _set_calendar_day(journey_day, journey_day)
+                st.rerun()
+        with title_col:
+            st.markdown(f"### Day {pick} — {day_title}")
+            st.caption(cal_date.strftime("%A, %B %d"))
+
     st.markdown(
         rich_cal_day_card_html(summary, cal_date, pick, journey_day, pick, hero=True),
         unsafe_allow_html=True,
@@ -7589,6 +8056,50 @@ def render_calendar_view(
         day_venue_strip_html(df, pick, max_icons=6, size=36),
         unsafe_allow_html=True,
     )
+
+    with st.expander("📅 Pick another day", expanded=not is_today):
+        other = st.selectbox(
+            "Day",
+            list(range(1, TOTAL_DAYS + 1)),
+            index=pick - 1,
+            format_func=lambda d: _calendar_day_label(settings, d),
+            key="cal_day_select",
+            label_visibility="collapsed",
+        )
+        if other != pick:
+            _set_calendar_day(other, journey_day)
+            st.rerun()
+
+    day_photos = filter_journey_media(kind="day", day_num=pick)
+    if not day_photos.empty:
+        st.markdown("**Day photos**")
+        render_media_thumbnail_grid(day_photos, f"cal_day_gallery_{pick}")
+    render_media_upload_section(
+        "calendar",
+        kind="day",
+        day_num=pick,
+        label="📸 Add day photos",
+        compact=True,
+    )
+    day_locs = sorted(df[df["day_num"] == pick]["location"].unique().tolist())
+    if day_locs:
+        loc_labels = [location_person_label(loc) for loc in day_locs]
+        loc_idx = 0
+        if len(day_locs) > 1:
+            loc_idx = st.selectbox(
+                "Location for photo",
+                range(len(day_locs)),
+                format_func=lambda i: loc_labels[i],
+                key=f"cal_loc_photo_pick_{pick}",
+            )
+        render_media_upload_section(
+            "calendar",
+            kind="location",
+            location=str(day_locs[loc_idx]),
+            day_num=pick,
+            label=f"📍 {loc_labels[loc_idx]} photo",
+            compact=True,
+        )
 
     st.divider()
     st.markdown("##### Complete quests")
@@ -7717,14 +8228,19 @@ def render_dashboard(
     journey_day: int,
     partner_summary: dict,
     bonus_df: pd.DataFrame | None = None,
+    partners_df: pd.DataFrame | None = None,
+    settings: dict | None = None,
 ):
     bonus_df = bonus_df if bonus_df is not None else load_bonus_df()
+    partners_df = partners_df if partners_df is not None else load_partners_df()
+    settings = settings if settings is not None else load_settings()
     render_path_hero(df, stats, journey_day)
     render_collar_trail(df, journey_day)
     render_journey_mobile_summary(stats, journey_day)
     render_journey_path(df, journey_day, bonus_df)
     render_achievements_wall(stats)
     render_path_loot_summary(stats, partner_summary)
+    render_journey_slideshow(df, partners_df, settings)
 
 
 def quest_pick_label(day_df: pd.DataFrame, activity_key: str) -> str:
@@ -7745,8 +8261,10 @@ def render_day_quest_nav(
     key_prefix: str,
     target: float,
     earned_pts: float,
-) -> tuple[str | None, str | None]:
-    """Return (active_pending_key, active_done_key) for focused quest panels."""
+    df: pd.DataFrame | None = None,
+    partners_df: pd.DataFrame | None = None,
+) -> str | None:
+    """Return active_pending_key for the focused quest panel."""
     pending_df = day_df[day_df["status"] != "earned"]
     earned_df = day_df[day_df["status"] == "earned"]
     pick_key = f"{key_prefix}_active_quest_{day_num}"
@@ -7791,7 +8309,7 @@ def render_day_quest_nav(
             st.session_state[pick_key] = pending_keys[0]
         if len(pending_keys) >= 6:
             st.markdown(
-                '<div class="cj-quest-section-label">🎯 To complete — pick a quest</div>',
+                '<div class="cj-quest-section-label">🎯 Pick a quest to work on</div>',
                 unsafe_allow_html=True,
             )
             chosen = st.selectbox(
@@ -7811,7 +8329,7 @@ def render_day_quest_nav(
             active_pending = str(chosen)
         else:
             st.markdown(
-                '<div class="cj-quest-section-label">🎯 To complete — tap a quest</div>',
+                '<div class="cj-quest-section-label">🎯 Pick a quest to work on</div>',
                 unsafe_allow_html=True,
             )
             ncols = min(len(pending_keys), 2)
@@ -7836,13 +8354,13 @@ def render_day_quest_nav(
                         st.rerun()
             active_pending = str(st.session_state[pick_key])
 
-    active_done: str | None = None
     if earned_keys:
         if done_key not in st.session_state or st.session_state[done_key] not in earned_keys:
             st.session_state[done_key] = earned_keys[-1]
+        viewing_done = st.session_state.get(f"{key_prefix}_viewing_done_{day_num}")
         with st.expander(
-            f"✅ Completed ({len(earned_keys)}) — review or edit past logs",
-            expanded=not pending_keys,
+            f"✅ Completed ({len(earned_keys)}) — tap to review",
+            expanded=bool(viewing_done),
         ):
             if len(earned_keys) >= 4:
                 chosen_done = st.selectbox(
@@ -7873,11 +8391,17 @@ def render_day_quest_nav(
                             st.session_state[done_key] = key
                             st.session_state[f"{key_prefix}_viewing_done_{day_num}"] = True
                             st.rerun()
-            active_done = str(st.session_state[done_key])
-            if pending_keys and not st.session_state.get(f"{key_prefix}_viewing_done_{day_num}"):
-                active_done = None
+            if (
+                viewing_done
+                and df is not None
+                and partners_df is not None
+                and st.session_state.get(done_key) in earned_keys
+            ):
+                done_row = day_df[day_df["activity_key"] == st.session_state[done_key]].iloc[0]
+                render_quest_card(done_row, df, focused=False)
+                _render_quest_done_panel(done_row, day_num, key_prefix, partners_df)
 
-    return active_pending, active_done
+    return active_pending
 
 
 def _render_quest_log_panel(
@@ -7897,6 +8421,15 @@ def _render_quest_log_panel(
     )
 
     if mode == "Complete as planned":
+        render_media_upload_section(
+            key_prefix,
+            kind="quest",
+            activity_key=str(row["activity_key"]),
+            location=str(row["location"]),
+            day_num=day_num,
+            label="📸 Quest photos",
+            compact=True,
+        )
         if is_solo_half_point(row):
             notes = st.text_area(
                 "Notes (optional)",
@@ -8092,10 +8625,19 @@ def _render_quest_done_panel(
     key_prefix: str,
     partners_df: pd.DataFrame,
 ) -> None:
+    render_media_upload_section(
+        key_prefix,
+        kind="quest",
+        activity_key=str(row["activity_key"]),
+        location=str(row["location"]),
+        day_num=day_num,
+        label="📸 Quest photos",
+        compact=True,
+    )
     render_encounter_summary(row["activity_key"])
     enc = load_encounters_for_activity(row["activity_key"])
     if not enc.empty:
-        with st.expander("Edit partner log", expanded=True):
+        with st.expander("Edit partner log", expanded=False):
             edit_count = len(enc)
             edit_rows = render_partner_logging_form(
                 row["activity_key"],
@@ -8262,8 +8804,8 @@ def render_day_detail(
             unsafe_allow_html=True,
         )
 
-    active_pending, active_done = render_day_quest_nav(
-        day_df, day_num, key_prefix, target, earned_pts
+    active_pending = render_day_quest_nav(
+        day_df, day_num, key_prefix, target, earned_pts, df, partners_df
     )
 
     used_as_sub_keys = valid_substitution_keys(df)
@@ -8272,7 +8814,6 @@ def render_day_detail(
     ]
 
     if active_pending:
-        st.markdown('<div class="cj-quest-section-label">▶ Working on this quest</div>', unsafe_allow_html=True)
         pending_rows = day_df[day_df["activity_key"] == active_pending]
         if pending_rows.empty:
             st.warning("That quest is no longer pending — pick another above.")
@@ -8285,18 +8826,6 @@ def render_day_detail(
             _render_quest_log_panel(
                 row, df, day_num, key_prefix, partners_df, encounters_df, sub_pool
             )
-
-    if active_done:
-        done_rows = day_df[day_df["activity_key"] == active_done]
-        if not done_rows.empty:
-            row = done_rows.iloc[0]
-            if not active_pending:
-                st.markdown(
-                    '<div class="cj-quest-section-label">✅ Reviewing completed quest</div>',
-                    unsafe_allow_html=True,
-                )
-            render_quest_card(row, df, focused=not active_pending)
-            _render_quest_done_panel(row, day_num, key_prefix, partners_df)
 
     if not sub_pool.empty:
         st.markdown("#### Still open after substitutions")
@@ -8315,13 +8844,15 @@ def render_more_view(
 ) -> None:
     choice = st.radio(
         "MoreMenu",
-        ["👥 Partners", "🔄 Swap", "⚙️ Settings"],
+        ["👥 Partners", "📸 Memories", "🔄 Swap", "⚙️ Settings"],
         horizontal=True,
         label_visibility="collapsed",
         key="more_tab_radio",
     )
     if choice == "👥 Partners":
         render_partners_tab(encounters_df, partners_df)
+    elif choice == "📸 Memories":
+        render_journey_slideshow(df, partners_df, settings)
     elif choice == "🔄 Swap":
         render_substitution_pool(df)
     else:
@@ -8462,7 +8993,9 @@ def main():
         render_stats_view(df, encounters_df, bonus_df, stats, partner_summary, settings)
 
     elif selected_tab == TAB_JOURNEY:
-        render_dashboard(df, stats, journey_day, partner_summary, bonus_df)
+        render_dashboard(
+            df, stats, journey_day, partner_summary, bonus_df, partners_df, settings
+        )
 
     elif selected_tab == TAB_MORE:
         render_more_view(df, encounters_df, partners_df, settings)
