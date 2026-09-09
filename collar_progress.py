@@ -28,6 +28,17 @@ DB_PATH = DATA_DIR / "cap_collar_journey.sqlite3"
 SCHEMA_VERSION = 10
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 ALLOWED_UPLOAD_EXT = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
+MEDIA_KIND_CHALLENGE = "challenge"
+MEDIA_KIND_LOCATION = "location"
+MEDIA_KIND_PARTNER = "partner"
+MEDIA_KIND_DAY = "day"
+PHOTO_KIND_LABELS = {
+    MEDIA_KIND_CHALLENGE: "🎯 Challenge / quest",
+    MEDIA_KIND_LOCATION: "📍 Location",
+    MEDIA_KIND_PARTNER: "👤 Partner",
+    MEDIA_KIND_DAY: "📅 Day memory",
+}
+CHALLENGE_MEDIA_KINDS = frozenset({MEDIA_KIND_CHALLENGE, "quest"})
 TOTAL_DAYS = 14
 
 BONUS_COKE_POINTS = 5
@@ -947,6 +958,11 @@ def day_venue_banner_html(df: pd.DataFrame, day_num: int, title: str = "") -> st
 
 
 def quest_pick_image_uri(row) -> str | None:
+    act_key = str(row.get("activity_key") or "").strip()
+    if act_key:
+        user_uri = challenge_media_uri(act_key)
+        if user_uri:
+            return user_uri
     img_file = str(row.get("image_file") or "").strip()
     if img_file:
         uri = _venue_image_uri(img_file)
@@ -1044,6 +1060,13 @@ def celebrations_enabled(settings: dict | None = None) -> bool:
 
 
 def location_icon_html(location: str, size: int = 22) -> str:
+    uri = location_media_uri(location)
+    if uri:
+        return (
+            f'<img class="cj-loc-icon-img cj-polaroid" src="{uri}" alt="" '
+            f'style="width:{size}px;height:{size}px;object-fit:cover;object-position:center top;'
+            f'border-radius:8px;vertical-align:-0.35em;margin-right:0.2rem;" />'
+        )
     meta = LOCATIONS.get(location, {"icon": "📍"})
     return location_meta_icon_html(meta, size)
 
@@ -3762,6 +3785,27 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
     font-size: 0.78rem;
     font-weight: 700;
 }
+.cj-partner-avatar {
+    display: inline-block;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--dl-border);
+    vertical-align: middle;
+    margin-right: 0.35rem;
+    box-shadow: var(--dl-shadow-sm);
+}
+.cj-partner-avatar-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #ece4f0;
+    color: #5a3d68;
+    font-weight: 800;
+    vertical-align: middle;
+    margin-right: 0.35rem;
+    border: 2px solid var(--dl-border);
+}
 </style>
 """
 
@@ -4576,12 +4620,14 @@ def emit_celebration_diff(
 def complete_quest(activity_key: str, notes: str = "", earned_points: int | None = None):
     before = snapshot_celebration_state()
     earn_activity(activity_key, notes, earned_points)
+    reset_quest_picker_after_complete(activity_key)
     emit_celebration_diff(before, snapshot_celebration_state(), activity_key=activity_key)
 
 
 def complete_substitute(slot_key: str, substitute_key: str, notes: str = ""):
     before = snapshot_celebration_state()
     substitute_activity(slot_key, substitute_key, notes)
+    reset_quest_picker_after_complete(slot_key)
     emit_celebration_diff(before, snapshot_celebration_state(), activity_key=slot_key)
 
 
@@ -5373,7 +5419,10 @@ def filter_journey_media(
     if df.empty:
         return df
     if kind:
-        df = df[df["kind"] == kind]
+        if kind == MEDIA_KIND_CHALLENGE:
+            df = df[df["kind"].isin(CHALLENGE_MEDIA_KINDS)]
+        else:
+            df = df[df["kind"] == kind]
     if activity_key:
         df = df[df["activity_key"] == activity_key]
     if partner_id is not None:
@@ -8251,8 +8300,37 @@ def quest_pick_label(day_df: pd.DataFrame, activity_key: str) -> str:
 
 
 def day_pending_point_total(day_df: pd.DataFrame) -> float:
-    pending = day_df[day_df["status"] != "earned"]
+    pending = day_df[day_df["status"] == "pending"]
     return sum(activity_effective_points(row) for _, row in pending.iterrows())
+
+
+def sync_quest_picker_state(key_prefix: str, day_num: int, pending_keys: list[str]) -> None:
+    """Keep quest picker aligned with pending-only list (drop completed from dropdown)."""
+    pick_key = f"{key_prefix}_active_quest_{day_num}"
+    dropdown_key = f"{key_prefix}_quest_dropdown_{day_num}"
+    if not pending_keys:
+        st.session_state.pop(pick_key, None)
+        st.session_state.pop(dropdown_key, None)
+        return
+    if st.session_state.get(pick_key) not in pending_keys:
+        st.session_state[pick_key] = pending_keys[0]
+        st.session_state.pop(dropdown_key, None)
+    if st.session_state.get(dropdown_key) not in pending_keys:
+        st.session_state.pop(dropdown_key, None)
+
+
+def reset_quest_picker_after_complete(activity_key: str) -> None:
+    df = load_activities_df()
+    match = df[df["activity_key"] == activity_key]
+    if match.empty:
+        return
+    day_num = int(match.iloc[0]["day_num"])
+    for prefix in ("calendar", "day"):
+        pick_key = f"{prefix}_active_quest_{day_num}"
+        dropdown_key = f"{prefix}_quest_dropdown_{day_num}"
+        if st.session_state.get(pick_key) == activity_key:
+            st.session_state.pop(pick_key, None)
+        st.session_state.pop(dropdown_key, None)
 
 
 def render_day_quest_nav(
@@ -8265,12 +8343,13 @@ def render_day_quest_nav(
     partners_df: pd.DataFrame | None = None,
 ) -> str | None:
     """Return active_pending_key for the focused quest panel."""
-    pending_df = day_df[day_df["status"] != "earned"]
+    pending_df = day_df[day_df["status"] == "pending"]
     earned_df = day_df[day_df["status"] == "earned"]
     pick_key = f"{key_prefix}_active_quest_{day_num}"
     done_key = f"{key_prefix}_edit_done_{day_num}"
     pending_keys = pending_df["activity_key"].astype(str).tolist()
     earned_keys = earned_df["activity_key"].astype(str).tolist()
+    sync_quest_picker_state(key_prefix, day_num, pending_keys)
 
     left_pts = day_pending_point_total(day_df)
     left_label = (
@@ -8305,8 +8384,6 @@ def render_day_quest_nav(
 
     active_pending: str | None = None
     if pending_keys:
-        if pick_key not in st.session_state or st.session_state[pick_key] not in pending_keys:
-            st.session_state[pick_key] = pending_keys[0]
         if len(pending_keys) >= 6:
             st.markdown(
                 '<div class="cj-quest-section-label">🎯 Pick a quest to work on</div>',
