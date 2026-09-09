@@ -3576,6 +3576,51 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
         padding-top: calc(0.45rem + env(safe-area-inset-top));
     }
     .cj-offline-banner.show { display: block; }
+    .cj-quick-complete-bar {
+        position: sticky;
+        top: calc(0.35rem + env(safe-area-inset-top));
+        z-index: 950;
+        background: linear-gradient(135deg, #e8f8e8 0%, #d4f5d4 100%);
+        border: 2px solid #58cc02;
+        border-radius: 14px;
+        padding: 0.65rem 0.85rem;
+        margin: 0.5rem 0 0.65rem;
+        box-shadow: 0 4px 18px rgba(88,204,2,0.22);
+    }
+    .cj-quick-complete-title {
+        font-weight: 800;
+        font-size: 0.95rem;
+        color: #2d6a00;
+    }
+    .cj-quick-complete-sub {
+        font-size: 0.78rem;
+        color: #4a6741;
+        margin-top: 0.15rem;
+        line-height: 1.35;
+    }
+    div[data-testid="stMarkdown"]:has(.cj-quick-complete-bar) + div[data-testid="stButton"] {
+        position: sticky;
+        top: calc(4.5rem + env(safe-area-inset-top));
+        z-index: 951;
+        margin-bottom: 0.35rem;
+    }
+}
+.cj-quick-complete-bar {
+    background: linear-gradient(135deg, #e8f8e8 0%, #d4f5d4 100%);
+    border: 2px solid #58cc02;
+    border-radius: 14px;
+    padding: 0.65rem 0.85rem;
+    margin: 0.5rem 0 0.65rem;
+}
+.cj-quick-complete-title {
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: #2d6a00;
+}
+.cj-quick-complete-sub {
+    font-size: 0.78rem;
+    color: #4a6741;
+    margin-top: 0.15rem;
 }
 @media (max-width: 768px) and (prefers-color-scheme: dark) {
     .stApp {
@@ -5753,6 +5798,175 @@ def encounter_rows_ready(encounter_rows: list[dict] | None) -> bool:
     return all(str(row.get("name", "")).strip() for row in encounter_rows)
 
 
+def quest_log_prefix(key_prefix: str, activity_key: str) -> str:
+    return f"{key_prefix}_log_{activity_key}"
+
+
+def encounter_rows_from_session(
+    log_prefix: str,
+    location: str,
+    slot_count: int,
+) -> list[dict]:
+    count = max(1, slot_count)
+    rows: list[dict] = []
+    for i in range(count):
+        auto_label = suggest_partner_label(location, i)
+        pick = st.session_state.get(f"{log_prefix}_pick_{i}", "— New partner —")
+        rows.append(
+            {
+                "slot_index": i,
+                "name": st.session_state.get(f"{log_prefix}_name_{i}", ""),
+                "auto_label": auto_label,
+                "is_repeat": pick != "— New partner —",
+                "act_types": st.session_state.get(f"{log_prefix}_acts_{i}", list(DEFAULT_PARTNER_ACTS)),
+                "initiated_by": st.session_state.get(f"{log_prefix}_init_{i}", "Mutual"),
+                "notes": st.session_state.get(f"{log_prefix}_pnotes_{i}", ""),
+            }
+        )
+    return rows
+
+
+def quest_is_preloaded(key_prefix: str, activity_key: str) -> bool:
+    return bool(
+        st.session_state.get(f"quest_armed_{key_prefix}_{activity_key}")
+        or st.session_state.get(f"preset_applied_{key_prefix}_{activity_key}")
+    )
+
+
+def clear_quest_armed(key_prefix: str, activity_key: str) -> None:
+    st.session_state.pop(f"quest_armed_{key_prefix}_{activity_key}", None)
+
+
+def quest_partner_log_count(row, key_prefix: str, extra: int | None = None) -> int:
+    if is_before_noon_village(row):
+        return 1
+    if extra is not None:
+        return max(1, int(extra))
+    pts_key = f"{key_prefix}_pts_{row['activity_key']}"
+    if pts_key in st.session_state:
+        return max(1, int(st.session_state[pts_key]))
+    return max(1, int(row["points"]))
+
+
+def quest_quick_complete_preview(encounter_rows: list[dict]) -> str:
+    names = [str(r.get("name", "")).strip() for r in encounter_rows if str(r.get("name", "")).strip()]
+    if not names:
+        return "Partners pre-filled"
+    preview = ", ".join(names[:4])
+    if len(names) > 4:
+        preview += f" +{len(names) - 4} more"
+    return f"{len(names)} partner(s) · {preview}"
+
+
+def render_quest_quick_complete_bar(
+    row,
+    day_num: int,
+    key_prefix: str,
+    partners_df: pd.DataFrame,
+    encounter_rows: list[dict],
+    notes: str,
+    points: int,
+) -> bool:
+    """Top quick-complete action when partners are pre-filled. Returns True if completed."""
+    act_key = str(row["activity_key"])
+    st.markdown(
+        f'<div class="cj-quick-complete-bar">'
+        f'<div class="cj-quick-complete-title">Ready — tap to complete</div>'
+        f'<div class="cj-quick-complete-sub">{quest_quick_complete_preview(encounter_rows)}'
+        f" · +{format_points(points)} XP</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+    if st.button(
+        complete_quest_button_label(row, points),
+        key=f"{key_prefix}_quick_complete_{act_key}",
+        type="primary",
+        use_container_width=True,
+    ):
+        if try_auto_complete_direct(
+            act_key,
+            row["location"],
+            day_num,
+            encounter_rows,
+            partners_df,
+            notes,
+            points,
+        ):
+            clear_quest_armed(key_prefix, act_key)
+            return True
+    return False
+
+
+def quest_quick_complete_context(
+    row,
+    key_prefix: str,
+    encounters_df: pd.DataFrame,
+    day_num: int,
+) -> dict | None:
+    """Build quick-complete inputs when a preset pre-filled this quest."""
+    act_key = str(row["activity_key"])
+    if not quest_is_preloaded(key_prefix, act_key):
+        return None
+    mode_key = f"{key_prefix}_mode_{act_key}"
+    if st.session_state.get(mode_key, "Complete as planned") != "Complete as planned":
+        return None
+    if is_solo_half_point(row):
+        return None
+    notes_key = f"{key_prefix}_notes_{act_key}"
+    pts_key = f"{key_prefix}_pts_{act_key}"
+    if is_bring_back_half(row):
+        log_count = 1
+        points = 1
+    else:
+        planned = int(row["points"])
+        before_noon = is_before_noon_village(row)
+        if pts_key in st.session_state:
+            points = int(st.session_state[pts_key])
+        else:
+            points = suggested_points_for_location(
+                encounters_df, row["location"], day_num, planned
+            )
+        if before_noon:
+            points = min(points, 1)
+        log_count = quest_partner_log_count(row, key_prefix, points)
+    return {
+        "log_count": log_count,
+        "points": points,
+        "notes": st.session_state.get(notes_key, ""),
+    }
+
+
+def maybe_render_quest_quick_complete(
+    row,
+    day_num: int,
+    key_prefix: str,
+    partners_df: pd.DataFrame,
+    encounters_df: pd.DataFrame,
+) -> bool:
+    """Show quick-complete bar right under the quest card when preset pre-filled."""
+    ctx = quest_quick_complete_context(row, key_prefix, encounters_df, day_num)
+    if not ctx:
+        return False
+    act_key = str(row["activity_key"])
+    log_prefix = quest_log_prefix(key_prefix, act_key)
+    enc_rows = encounter_rows_from_session(
+        log_prefix, row["location"], ctx["log_count"]
+    )
+    if not encounter_rows_ready(enc_rows):
+        return False
+    if render_quest_quick_complete_bar(
+        row,
+        day_num,
+        key_prefix,
+        partners_df,
+        enc_rows,
+        ctx["notes"],
+        ctx["points"],
+    ):
+        st.rerun()
+    return True
+
+
 def finalize_pending_with_saved_encounters(df: pd.DataFrame) -> bool:
     """Complete pending quests that already have partner rows saved (e.g. after refresh)."""
     changed = False
@@ -7694,44 +7908,42 @@ def _render_quest_log_panel(
                 st.rerun()
         elif is_bring_back_half(row):
             render_history_presets(df, encounters_df, row, day_num, key_prefix, partners_df)
-            notes = st.text_area(
-                "Notes (optional)",
-                key=f"{key_prefix}_notes_{row['activity_key']}",
-            )
-            encounter_rows = render_partner_logging_form(
-                row["activity_key"],
-                row["location"],
-                day_num,
-                1,
-                f"{key_prefix}_log_{row['activity_key']}",
-                partners_df,
-            )
+            act_key = str(row["activity_key"])
+            notes_key = f"{key_prefix}_notes_{act_key}"
+            log_prefix = quest_log_prefix(key_prefix, act_key)
+            armed = quest_is_preloaded(key_prefix, act_key)
+            if armed:
+                with st.expander("Review partner details (optional)", expanded=False):
+                    notes = st.text_area("Notes (optional)", key=notes_key)
+                    encounter_rows = render_partner_logging_form(
+                        act_key, row["location"], day_num, 1, log_prefix, partners_df
+                    )
+            else:
+                notes = st.text_area("Notes (optional)", key=notes_key)
+                encounter_rows = render_partner_logging_form(
+                    act_key, row["location"], day_num, 1, log_prefix, partners_df
+                )
             st.caption("Log who you brought back — half point toward today's goal.")
             if encounter_rows_ready(encounter_rows):
                 if st.button(
                     complete_quest_button_label(row, 1),
-                    key=f"{key_prefix}_complete_{row['activity_key']}",
+                    key=f"{key_prefix}_complete_{act_key}",
                     type="primary",
                     use_container_width=True,
                 ):
                     if try_auto_complete_direct(
-                        row["activity_key"],
-                        row["location"],
-                        day_num,
-                        encounter_rows,
-                        partners_df,
-                        notes,
-                        1,
+                        act_key, row["location"], day_num, encounter_rows, partners_df, notes, 1
                     ):
+                        clear_quest_armed(key_prefix, act_key)
                         st.rerun()
-            else:
+            elif not armed:
                 st.info("Fill in partner name(s) above, then hit **Complete quest**.")
         else:
             render_history_presets(df, encounters_df, row, day_num, key_prefix, partners_df)
-            notes = st.text_area(
-                "Notes (optional)", key=f"{key_prefix}_notes_{row['activity_key']}"
-            )
-            pts_key = f"{key_prefix}_pts_{row['activity_key']}"
+            act_key = str(row["activity_key"])
+            notes_key = f"{key_prefix}_notes_{act_key}"
+            pts_key = f"{key_prefix}_pts_{act_key}"
+            log_prefix = quest_log_prefix(key_prefix, act_key)
             planned = int(row["points"])
             before_noon_village = is_before_noon_village(row)
             if pts_key not in st.session_state:
@@ -7742,45 +7954,65 @@ def _render_quest_log_panel(
                 suggested = int(st.session_state[pts_key])
             if before_noon_village:
                 suggested = min(suggested, 1)
-            extra = st.number_input(
-                "Points earned (default = planned or typical for this location)",
-                min_value=0,
-                max_value=1 if before_noon_village else 30,
-                value=suggested,
-                key=pts_key,
-                help=(
-                    "One village encounter before noon."
-                    if before_noon_village
-                    else "Adapts from your history at this location (club, mousse party, etc.)."
-                ),
-            )
-            log_count = 1 if before_noon_village else max(1, int(extra))
-            encounter_rows = render_partner_logging_form(
-                row["activity_key"],
-                row["location"],
-                day_num,
-                log_count,
-                f"{key_prefix}_log_{row['activity_key']}",
-                partners_df,
-            )
+            armed = quest_is_preloaded(key_prefix, act_key)
+            preset_pts = int(st.session_state.get(pts_key, suggested))
+            if armed:
+                with st.expander("Adjust points & partners (optional)", expanded=False):
+                    notes = st.text_area("Notes (optional)", key=notes_key)
+                    extra = st.number_input(
+                        "Points earned (default = planned or typical for this location)",
+                        min_value=0,
+                        max_value=1 if before_noon_village else 30,
+                        value=suggested,
+                        key=pts_key,
+                        help=(
+                            "One village encounter before noon."
+                            if before_noon_village
+                            else "Adapts from your history at this location (club, mousse party, etc.)."
+                        ),
+                    )
+                    log_count = quest_partner_log_count(row, key_prefix, int(extra))
+                    encounter_rows = render_partner_logging_form(
+                        act_key, row["location"], day_num, log_count, log_prefix, partners_df
+                    )
+            else:
+                notes = st.text_area("Notes (optional)", key=notes_key)
+                extra = st.number_input(
+                    "Points earned (default = planned or typical for this location)",
+                    min_value=0,
+                    max_value=1 if before_noon_village else 30,
+                    value=suggested,
+                    key=pts_key,
+                    help=(
+                        "One village encounter before noon."
+                        if before_noon_village
+                        else "Adapts from your history at this location (club, mousse party, etc.)."
+                    ),
+                )
+                log_count = quest_partner_log_count(row, key_prefix, int(extra))
+                encounter_rows = render_partner_logging_form(
+                    act_key, row["location"], day_num, log_count, log_prefix, partners_df
+                )
             if encounter_rows_ready(encounter_rows):
+                pts = int(st.session_state.get(pts_key, preset_pts if armed else suggested))
                 if st.button(
-                    complete_quest_button_label(row, int(extra)),
-                    key=f"{key_prefix}_complete_{row['activity_key']}",
+                    complete_quest_button_label(row, pts),
+                    key=f"{key_prefix}_complete_{act_key}",
                     type="primary",
                     use_container_width=True,
                 ):
                     if try_auto_complete_direct(
-                        row["activity_key"],
+                        act_key,
                         row["location"],
                         day_num,
                         encounter_rows,
                         partners_df,
                         notes,
-                        int(extra),
+                        pts,
                     ):
+                        clear_quest_armed(key_prefix, act_key)
                         st.rerun()
-            else:
+            elif not armed:
                 st.info("Fill in partner name(s) above, then hit **Complete quest**.")
     else:
         st.caption(
@@ -8047,6 +8279,9 @@ def render_day_detail(
         else:
             row = pending_rows.iloc[0]
             render_quest_card(row, df, focused=True)
+            maybe_render_quest_quick_complete(
+                row, day_num, key_prefix, partners_df, encounters_df
+            )
             _render_quest_log_panel(
                 row, df, day_num, key_prefix, partners_df, encounters_df, sub_pool
             )
