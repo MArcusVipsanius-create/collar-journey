@@ -3463,7 +3463,7 @@ div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButto
     height: 100%; border-radius: 999px; background: var(--dl-yellow);
 }
 .cj-rich-cal-day.hero {
-    min-height: 118px;
+    min-height: 108px;
     margin: 0.35rem 0 0.5rem;
     border-radius: 18px;
     box-shadow: 0 6px 20px rgba(0,0,0,0.15);
@@ -3472,6 +3472,31 @@ div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButto
 .cj-rich-cal-day.hero .cj-rich-cal-daylabel { font-size: 0.72rem; }
 .cj-rich-cal-day.hero .cj-rich-cal-icons { font-size: 0.85rem; min-height: 1.1rem; margin-top: 0.35rem; }
 .cj-rich-cal-day.hero .cj-rich-cal-prog { height: 6px; margin-top: 0.35rem; }
+.cj-rich-cal-track {
+    position: relative; margin-top: 0.3rem; height: 20px;
+}
+.cj-rich-cal-track-rail {
+    position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+    height: 4px; border-radius: 999px; background: rgba(255,255,255,0.22); overflow: hidden;
+}
+.cj-rich-cal-track-fill {
+    height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--dl-green) 0%, var(--dl-yellow) 100%);
+}
+.cj-rich-cal-track-icons {
+    position: relative; z-index: 1; display: flex; justify-content: space-between;
+    align-items: center; height: 20px; gap: 1px;
+}
+.cj-rich-cal-qicon {
+    font-size: 0.58rem; width: 16px; height: 16px; flex: 0 0 16px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.38); border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.35); line-height: 1;
+}
+.cj-rich-cal-qicon.done {
+    background: rgba(88,204,2,0.9); border-color: rgba(255,255,255,0.8);
+}
+.cj-rich-cal-qicon.pending { opacity: 0.5; filter: grayscale(0.35); }
 .cj-rich-cal-kicker {
     font-family: Fredoka, sans-serif;
     font-size: 1.05rem;
@@ -3482,12 +3507,12 @@ div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButto
     font-size: 0.78rem;
     font-weight: 700;
     opacity: 0.92;
-    margin: 0.2rem 0 0.5rem;
+    margin: 0.2rem 0 0.25rem;
     line-height: 1.35;
 }
 .cj-rich-cal-day.hero .cj-rich-cal-kicker { font-size: 1.15rem; }
-.cj-rich-cal-day.hero .cj-rich-cal-meta { font-size: 0.82rem; margin-bottom: 0.55rem; }
-.cj-rich-cal-day.hero .cj-rich-cal-inner { padding: 0.85rem 0.9rem 0.75rem; }
+.cj-rich-cal-day.hero .cj-rich-cal-meta { font-size: 0.78rem; margin-bottom: 0.2rem; }
+.cj-rich-cal-day.hero .cj-rich-cal-inner { padding: 0.75rem 0.85rem 0.65rem; }
 .cj-journey-mobile-summary { display: none; }
 
 .nice-app-bar {
@@ -8061,13 +8086,17 @@ def day_calendar_summary(
         loc = LOCATIONS.get(row["location"], {})
         location_hits.append(location_meta_icon_html(loc, 18))
 
+    sort_df = day_df
+    if "time_slot" in day_df.columns:
+        sort_df = day_df.sort_values(["time_slot", "id"], kind="stable")
     activity_chips = []
-    for _, row in day_df.iterrows():
+    for _, row in sort_df.iterrows():
         loc = LOCATIONS.get(row["location"], {})
         activity_chips.append(
             {
                 "title": row["title"],
                 "done": row["status"] == "earned",
+                "icon": str(loc.get("icon", "📍")),
                 "icon_html": location_meta_icon_html(loc, 20),
                 "points": format_points(
                     activity_effective_points(row)
@@ -8175,6 +8204,32 @@ def render_nice_app_bar(
     )
 
 
+def rich_cal_quest_track_html(summary: dict) -> str:
+    """Compact left-to-right quest progress with per-activity icons."""
+    chips = summary.get("activity_chips", [])
+    act_total = summary.get("act_total", 0)
+    act_done = summary.get("act_done", 0)
+    if not chips or not act_total:
+        pct = min(int(summary.get("pct", 0)), 100)
+        return f'<div class="cj-rich-cal-prog"><div style="width:{pct}%;"></div></div>'
+    fill_pct = min(100, round(100 * act_done / act_total))
+    icons = []
+    for chip in chips:
+        done = chip.get("done", False)
+        cls = "done" if done else "pending"
+        icon = chip.get("icon", "📍")
+        title = str(chip.get("title", "")).replace('"', "&quot;")
+        icons.append(f'<span class="cj-rich-cal-qicon {cls}" title="{title}">{icon}</span>')
+    return (
+        f'<div class="cj-rich-cal-track">'
+        f'<div class="cj-rich-cal-track-rail">'
+        f'<div class="cj-rich-cal-track-fill" style="width:{fill_pct}%;"></div>'
+        f"</div>"
+        f'<div class="cj-rich-cal-track-icons">{"".join(icons)}</div>'
+        f"</div>"
+    )
+
+
 def rich_cal_day_card_html(
     summary: dict,
     cal_date: date,
@@ -8213,32 +8268,43 @@ def rich_cal_day_card_html(
     icon_line = icons or pending or "·"
     pct = min(int(summary.get("pct", 0)), 100)
     hero_header = ""
+    progress_html = (
+        f'<div class="cj-rich-cal-icons">{icon_line}</div>'
+        f'<div class="cj-rich-cal-prog"><div style="width:{pct}%;"></div></div>'
+    )
     if hero and day_title:
         today_mark = "⚡ Today · " if is_today else ""
-        status_txt = {
-            "exceeded": "⭐ Goal exceeded",
-            "met": "✅ Goal achieved",
-        }.get(gs, f"{pct}% in progress")
         act_done = summary.get("act_done", 0)
         act_total = summary.get("act_total", 0)
+        earned_pts = summary.get("earned_pts", 0)
+        target = summary.get("target", 0)
+        goal_pts = summary.get("goal_pts", earned_pts)
+        left_pts = max(0.0, float(target) - float(goal_pts))
         venue_bit = f" · 📍 {venue_hint}" if venue_hint else ""
+        if gs == "exceeded":
+            status_txt = "⭐ Goal exceeded"
+        elif gs == "met":
+            status_txt = "✅ Goal achieved"
+        elif act_done >= act_total and act_total:
+            status_txt = f"All logged · {format_points(left_pts)} XP short"
+        elif act_done:
+            status_txt = f"{act_total - act_done} left"
+        else:
+            status_txt = f"{act_total} quests"
         hero_header = (
             f'<div class="cj-rich-cal-kicker">{today_mark}Day {day_num} — {day_title}</div>'
-            f'<div class="cj-rich-cal-meta">{cal_date.strftime("%A, %B %d")}{venue_bit} · '
-            f'{status_txt} · {act_done}/{act_total} quests</div>'
+            f'<div class="cj-rich-cal-meta">{cal_date.strftime("%a, %b %d")}{venue_bit} · '
+            f'{format_points(goal_pts)}/{format_points(target)} XP · '
+            f'{act_done}/{act_total} · {status_txt}</div>'
         )
+        progress_html = rich_cal_quest_track_html(summary)
     inner_parts = []
     if hero_header:
         inner_parts.append(hero_header)
     else:
         inner_parts.append(f'<div class="cj-rich-cal-num">{cal_date.day}</div>')
         inner_parts.append(f'<div class="cj-rich-cal-daylabel">Day {day_num}</div>')
-    inner_parts.extend(
-        [
-            f'<div class="cj-rich-cal-icons">{icon_line}</div>',
-            f'<div class="cj-rich-cal-prog"><div style="width:{pct}%;"></div></div>',
-        ]
-    )
+    inner_parts.append(progress_html)
     inner_html = "".join(inner_parts)
     return f"""
 <div class="{' '.join(css)}">
@@ -8739,49 +8805,15 @@ def render_day_quest_nav(
     partners_df: pd.DataFrame | None = None,
 ) -> str | None:
     """Tile grid for all day quests. Returns open activity_key for expand panel."""
-    pending_df = day_df[day_df["status"] == "pending"]
-    earned_df = day_df[day_df["status"] == "earned"]
     open_key = f"{key_prefix}_open_quest_{day_num}"
     quest_keys = day_df["activity_key"].astype(str).tolist()
-    pending_keys = pending_df["activity_key"].astype(str).tolist()
     sync_open_quest_state(key_prefix, day_num, quest_keys)
-
-    left_pts = day_pending_point_total(day_df)
-    left_label = (
-        f"{len(pending_df)} quest{'s' if len(pending_df) != 1 else ''} left"
-        if pending_keys
-        else "All done!"
-    )
-    goal_met = (
-        not pending_keys
-        and len(earned_df) == len(day_df)
-        and earned_pts + 0.001 >= target
-    )
-    if pending_keys:
-        status_html = f'<span class="cj-quest-nav-left">{left_label}</span>'
-    elif goal_met:
-        status_html = '<span class="cj-quest-nav-done">✓ Day complete</span>'
-    else:
-        short = format_points(max(0.0, target - earned_pts))
-        status_html = f'<span class="cj-quest-nav-left">All logged · {short} XP short</span>'
-    st.markdown(
-        f"""
-<div class="cj-quest-nav">
-  <div class="cj-quest-nav-title">
-    <span>{status_html}</span>
-    <span>{len(earned_df)}/{len(day_df)} done · {format_points(earned_pts)}/{format_points(target)} XP
-    {' · ~' + format_points(left_pts) + ' XP left' if pending_keys else ''}</span>
-  </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
 
     if not quest_keys:
         return None
 
     st.markdown(
-        '<div class="cj-quest-section-label">🎯 Today\'s quests — tap a tile to complete or edit</div>',
+        '<div class="cj-quest-section-label">🎯 Tap a tile to complete or edit</div>',
         unsafe_allow_html=True,
     )
     ncols = 2 if len(quest_keys) > 1 else 1
