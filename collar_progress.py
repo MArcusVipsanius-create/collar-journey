@@ -6237,29 +6237,23 @@ def render_photo_upload_panel(
         day_num = default_day_num
 
         if photo_kind == MEDIA_KIND_CHALLENGE:
-            day_num = st.selectbox(
-                "Day",
-                list(range(1, TOTAL_DAYS + 1)),
-                index=int(default_day_num or 1) - 1,
-                format_func=lambda d: f"Day {d} — {day_plan_meta(d)['title']}",
-                key=f"{panel_key}_challenge_day",
-            )
-            day_acts = df[df["day_num"] == day_num].sort_values(["time_slot", "slot_order"])
-            if day_acts.empty:
-                st.caption("No quests on this day.")
+            all_acts = df.sort_values(["day_num", "time_slot", "slot_order"], kind="stable")
+            if all_acts.empty:
+                st.caption("No quests in the plan.")
                 return
-            act_keys = day_acts["activity_key"].astype(str).tolist()
+            act_keys = all_acts["activity_key"].astype(str).tolist()
             default_act = default_activity_key if default_activity_key in act_keys else act_keys[0]
             activity_key = st.selectbox(
                 "Challenge / quest",
                 act_keys,
                 index=act_keys.index(default_act),
-                format_func=lambda k, _df=day_acts: quest_pick_label(_df, k),
+                format_func=lambda k, _df=all_acts: quest_pick_label_all(_df, k),
                 key=f"{panel_key}_challenge",
             )
-            loc_row = day_acts[day_acts["activity_key"] == activity_key].iloc[0]
-            location = str(loc_row["location"])
-            st.caption("Used as the thumbnail when you pick this challenge.")
+            quest_row = all_acts[all_acts["activity_key"] == activity_key].iloc[0]
+            location = str(quest_row["location"])
+            day_num = int(quest_row["day_num"])
+            st.caption("Used as the thumbnail when you pick this quest.")
         elif photo_kind == MEDIA_KIND_LOCATION:
             loc_opts = location_picker_options()
             default_loc = default_location if default_location in loc_opts else loc_opts[0]
@@ -6303,7 +6297,7 @@ def render_photo_upload_panel(
             activity_key=activity_key or None,
             partner_id=partner_id,
             location=location or None,
-            day_num=day_num if photo_kind == MEDIA_KIND_DAY else day_num,
+            day_num=day_num if photo_kind == MEDIA_KIND_DAY else None,
         )
         if not existing.empty:
             render_media_thumbnail_grid(existing, f"{panel_key}_{photo_kind}_grid")
@@ -9303,6 +9297,14 @@ def quest_pick_label(day_df: pd.DataFrame, activity_key: str) -> str:
     mark = "✅" if row["status"] == "earned" else "🎯"
     slot = time_slot_label(str(row["time_slot"]))
     return f"{mark} {row['title']} · {slot} · {activity_xp_badge(row)}"
+
+
+def quest_pick_label_all(df: pd.DataFrame, activity_key: str) -> str:
+    """Quest label for photo tagging — all days in one list."""
+    row = df[df["activity_key"] == activity_key].iloc[0]
+    mark = "✅" if row["status"] == "earned" else "🎯"
+    slot = time_slot_label(str(row["time_slot"]))
+    return f"Day {int(row['day_num'])} · {mark} {row['title']} · {slot}"
 
 
 def day_pending_point_total(day_df: pd.DataFrame) -> float:
