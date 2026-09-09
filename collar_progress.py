@@ -3378,12 +3378,22 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
 .cj-rich-cal-day.hero .cj-rich-cal-daylabel { font-size: 0.72rem; }
 .cj-rich-cal-day.hero .cj-rich-cal-icons { font-size: 0.85rem; min-height: 1.25rem; }
 .cj-rich-cal-day.hero .cj-rich-cal-prog { height: 6px; margin-top: 0.4rem; }
-.cj-cal-day-status {
-    font-size: 0.88rem;
+.cj-rich-cal-kicker {
+    font-family: Fredoka, sans-serif;
+    font-size: 1.05rem;
     font-weight: 700;
-    color: var(--dl-muted);
-    margin: 0 0 0.65rem;
+    line-height: 1.2;
 }
+.cj-rich-cal-meta {
+    font-size: 0.78rem;
+    font-weight: 700;
+    opacity: 0.92;
+    margin: 0.2rem 0 0.5rem;
+    line-height: 1.35;
+}
+.cj-rich-cal-day.hero .cj-rich-cal-kicker { font-size: 1.15rem; }
+.cj-rich-cal-day.hero .cj-rich-cal-meta { font-size: 0.82rem; margin-bottom: 0.55rem; }
+.cj-rich-cal-day.hero .cj-rich-cal-inner { padding: 0.85rem 0.9rem 0.75rem; }
 .cj-journey-mobile-summary { display: none; }
 
 .nice-app-bar {
@@ -8076,6 +8086,9 @@ def rich_cal_day_card_html(
     journey_day: int,
     view_day: int,
     hero: bool = False,
+    *,
+    day_title: str = "",
+    is_today: bool = False,
 ) -> str:
     gs = summary.get("goal_status", "pending")
     css = ["cj-rich-cal-day"]
@@ -8102,13 +8115,29 @@ def rich_cal_day_card_html(
     pending = " ".join(summary.get("pending_icons", [])[:2])
     icon_line = icons or pending or "·"
     pct = min(int(summary.get("pct", 0)), 100)
+    hero_header = ""
+    if hero and day_title:
+        today_mark = "⚡ Today · " if is_today else ""
+        status_txt = {
+            "exceeded": "⭐ Goal exceeded",
+            "met": "✅ Goal achieved",
+        }.get(gs, f"{pct}% in progress")
+        act_done = summary.get("act_done", 0)
+        act_total = summary.get("act_total", 0)
+        hero_header = (
+            f'<div class="cj-rich-cal-kicker">{today_mark}Day {day_num} — {day_title}</div>'
+            f'<div class="cj-rich-cal-meta">{cal_date.strftime("%A, %B %d")} · '
+            f"{status_txt} · {act_done}/{act_total} quests</div>"
+        )
+    day_label = "" if hero_header else f'<div class="cj-rich-cal-daylabel">Day {day_num}</div>'
     return f"""
 <div class="{' '.join(css)}">
   {bg_html}
   <div class="cj-rich-cal-scrim"></div>
   <div class="cj-rich-cal-inner">
+    {hero_header}
     <div class="cj-rich-cal-num">{cal_date.day}</div>
-    <div class="cj-rich-cal-daylabel">Day {day_num}</div>
+    {day_label}
     <div class="cj-rich-cal-icons">{icon_line}</div>
     <div class="cj-rich-cal-prog"><div style="width:{pct}%;"></div></div>
   </div>
@@ -8368,32 +8397,22 @@ def render_calendar_view(
     cal_date = journey_date(settings, pick)
     day_title = day_plan_meta(pick)["title"]
 
-    if is_today:
-        st.markdown(f"### ⚡ Today · Day {pick} — {day_title}")
-        st.caption(cal_date.strftime("%A, %B %d"))
-    else:
-        back_col, title_col = st.columns([1, 3])
-        with back_col:
-            if st.button("← Today", key="cal_back_today", use_container_width=True):
-                _set_calendar_day(journey_day, journey_day)
-                st.rerun()
-        with title_col:
-            st.markdown(f"### Day {pick} — {day_title}")
-            st.caption(cal_date.strftime("%A, %B %d"))
+    if not is_today:
+        if st.button("← Today", key="cal_back_today", use_container_width=True):
+            _set_calendar_day(journey_day, journey_day)
+            st.rerun()
 
     st.markdown(
-        rich_cal_day_card_html(summary, cal_date, pick, journey_day, pick, hero=True),
-        unsafe_allow_html=True,
-    )
-
-    status_txt = {
-        "exceeded": "⭐ Goal exceeded",
-        "met": "✅ Goal achieved",
-    }.get(summary.get("goal_status", "pending"), f"{summary['pct']}% in progress")
-    st.markdown(
-        f"<div class='cj-cal-day-status'>{status_txt} · "
-        f"{summary['act_done']}/{summary['act_total']} quests · "
-        f"{cal_date.strftime('%A, %B %d')}</div>",
+        rich_cal_day_card_html(
+            summary,
+            cal_date,
+            pick,
+            journey_day,
+            pick,
+            hero=True,
+            day_title=day_title,
+            is_today=is_today,
+        ),
         unsafe_allow_html=True,
     )
 
