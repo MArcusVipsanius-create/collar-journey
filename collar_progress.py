@@ -6199,7 +6199,54 @@ def partner_media_uri(partner_id: int) -> str | None:
 
 
 def challenge_media_uri(activity_key: str) -> str | None:
-    return latest_media_data_uri(filter_journey_media(kind=MEDIA_KIND_CHALLENGE, activity_key=activity_key))
+    uri = latest_media_data_uri(
+        filter_journey_media(kind=MEDIA_KIND_CHALLENGE, activity_key=activity_key)
+    )
+    if uri:
+        return uri
+    act_df = load_activities_df()
+    act = activity_row(act_df, activity_key)
+    if act is None:
+        return None
+    title = str(act["title"]).strip()
+    media = filter_journey_media(kind=MEDIA_KIND_CHALLENGE)
+    if media.empty:
+        return None
+    for _, mrow in media.iloc[::-1].iterrows():
+        key = str(mrow.get("activity_key") or "").strip()
+        if not key:
+            continue
+        peer = activity_row(act_df, key)
+        if peer is not None and str(peer["title"]).strip() == title:
+            return media_data_uri(str(mrow["filename"]))
+    return None
+
+
+def challenge_media_for_title(df: pd.DataFrame, title: str) -> pd.DataFrame:
+    """Challenge photos linked to any quest with this title (not day-specific)."""
+    title = str(title).strip()
+    keys = df[df["title"].astype(str).str.strip() == title]["activity_key"].astype(str).tolist()
+    media = filter_journey_media(kind=MEDIA_KIND_CHALLENGE)
+    if media.empty or not keys:
+        return media.iloc[0:0]
+    return media[media["activity_key"].astype(str).isin(keys)]
+
+
+def unique_quest_titles(df: pd.DataFrame) -> list[str]:
+    seen: set[str] = set()
+    titles: list[str] = []
+    for title in df["title"].astype(str).str.strip():
+        if title and title not in seen:
+            seen.add(title)
+            titles.append(title)
+    return titles
+
+
+def first_activity_key_for_title(df: pd.DataFrame, title: str) -> str:
+    matches = df[df["title"].astype(str).str.strip() == str(title).strip()]
+    if matches.empty:
+        return ""
+    return str(matches.iloc[0]["activity_key"])
 
 
 def partner_avatar_html(partner_id: int, display_name: str, size: int = 36) -> str:
@@ -6226,10 +6273,11 @@ def media_slide_label(
     caption = str(row.get("caption") or "").strip()
     kind = str(row.get("kind") or "")
     if kind in CHALLENGE_MEDIA_KINDS and row.get("activity_key"):
+        if caption:
+            return caption
         act = activity_row(df, str(row["activity_key"]))
         if act is not None:
-            base = quest_tag_label(df, str(row["activity_key"]))
-            return f"{base} — {caption}" if caption else base
+            return quest_tag_label(df, str(row["activity_key"]))
     if kind == "partner" and pd.notna(row.get("partner_id")):
         prow = partner_row(partners_df, int(row["partner_id"]))
         if prow is not None:
@@ -6243,8 +6291,6 @@ def media_slide_label(
         return f"{base} — {caption}" if caption else base
     if kind == "location" and row.get("location"):
         base = f"📍 {location_person_label(str(row['location']))}"
-        if pd.notna(row.get("day_num")):
-            base = f"Day {int(row['day_num'])} · {base}"
         return f"{base} — {caption}" if caption else base
     return caption or "Journey memory"
 
@@ -6457,24 +6503,28 @@ def render_photo_upload_panel(
         activity_key = ""
         partner_id: int | None = None
         location = ""
-        day_num = default_day_num
+        day_num = default_day_num if photo_kind == MEDIA_KIND_DAY else None
 
         if photo_kind == MEDIA_KIND_CHALLENGE:
             all_acts = df.sort_values(["day_num", "time_slot", "slot_order"], kind="stable")
             if all_acts.empty:
                 st.caption("No quests in the plan.")
                 return
-            act_keys = all_acts["activity_key"].astype(str).tolist()
-            default_act = default_activity_key if default_activity_key in act_keys else act_keys[0]
-            activity_key = st.selectbox(
+            quest_titles = unique_quest_titles(all_acts)
+            default_title = ""
+            if default_activity_key:
+                act = activity_row(all_acts, default_activity_key)
+                if act is not None:
+                    default_title = str(act["title"]).strip()
+            if default_title not in quest_titles:
+                default_title = quest_titles[0]
+            picked_title = st.selectbox(
                 "Challenge / quest",
-                act_keys,
-                index=act_keys.index(default_act),
-                format_func=lambda k, _df=all_acts: quest_pick_label_all(_df, k),
+                quest_titles,
+                index=quest_titles.index(default_title),
                 key=f"{panel_key}_challenge",
             )
-            quest_row = all_acts[all_acts["activity_key"] == activity_key].iloc[0]
-            location = str(quest_row["location"])
+            activity_key = first_activity_key_for_title(all_acts, picked_title)
             st.caption("Used as the thumbnail when you pick this quest.")
         elif photo_kind == MEDIA_KIND_LOCATION:
             loc_opts = location_picker_options()
@@ -6514,13 +6564,16 @@ def render_photo_upload_panel(
             )
             st.caption("General day memory — appears in the slideshow.")
 
-        existing = filter_journey_media(
-            kind=photo_kind,
-            activity_key=activity_key or None,
-            partner_id=partner_id,
-            location=location or None,
-            day_num=day_num if photo_kind == MEDIA_KIND_DAY else None,
-        )
+        if photo_kind == MEDIA_KIND_CHALLENGE:
+            existing = challenge_media_for_title(df, picked_title)
+        else:
+            existing = filter_journey_media(
+                kind=photo_kind,
+                activity_key=activity_key or None,
+                partner_id=partner_id,
+                location=location or None,
+                day_num=day_num if photo_kind == MEDIA_KIND_DAY else None,
+            )
         if not existing.empty:
             render_media_thumbnail_grid(existing, f"{panel_key}_{photo_kind}_grid")
 
@@ -9528,15 +9581,13 @@ def quest_pick_label(day_df: pd.DataFrame, activity_key: str) -> str:
 
 
 def quest_tag_label(df: pd.DataFrame, activity_key: str) -> str:
-    """Quest-only label for photo tags — no day prefix."""
+    """Quest title only — no day, slot, time, status, or XP in photo tags."""
     row = df[df["activity_key"] == activity_key].iloc[0]
-    mark = "✅" if row["status"] == "earned" else "🎯"
-    slot = time_slot_label(str(row["time_slot"]))
-    return f"{mark} {row['title']} · {slot}"
+    return str(row["title"]).strip()
 
 
 def quest_pick_label_all(df: pd.DataFrame, activity_key: str) -> str:
-    """Quest picker label when choosing from all quests."""
+    """Quest picker label — title only, no day."""
     return quest_tag_label(df, activity_key)
 
 
