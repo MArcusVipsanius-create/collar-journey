@@ -5504,6 +5504,43 @@ def delete_journey_media(media_id: str) -> None:
     conn.close()
 
 
+def latest_media_data_uri(media_df: pd.DataFrame) -> str | None:
+    if media_df.empty:
+        return None
+    for _, row in media_df.iloc[::-1].iterrows():
+        uri = media_data_uri(str(row["filename"]))
+        if uri:
+            return uri
+    return None
+
+
+def location_media_uri(location: str) -> str | None:
+    return latest_media_data_uri(filter_journey_media(kind=MEDIA_KIND_LOCATION, location=location))
+
+
+def partner_media_uri(partner_id: int) -> str | None:
+    return latest_media_data_uri(filter_journey_media(kind=MEDIA_KIND_PARTNER, partner_id=partner_id))
+
+
+def challenge_media_uri(activity_key: str) -> str | None:
+    return latest_media_data_uri(filter_journey_media(kind=MEDIA_KIND_CHALLENGE, activity_key=activity_key))
+
+
+def partner_avatar_html(partner_id: int, display_name: str, size: int = 36) -> str:
+    uri = partner_media_uri(partner_id)
+    if uri:
+        return (
+            f'<img class="cj-partner-avatar" src="{uri}" alt="" '
+            f'style="width:{size}px;height:{size}px;" />'
+        )
+    initial = html.escape((display_name or "?")[:1].upper())
+    return (
+        f'<span class="cj-partner-avatar-fallback" '
+        f'style="width:{size}px;height:{size}px;font-size:{max(12, size // 2)}px;">'
+        f"{initial}</span>"
+    )
+
+
 def media_slide_label(
     row: pd.Series,
     df: pd.DataFrame,
@@ -5512,7 +5549,7 @@ def media_slide_label(
 ) -> str:
     caption = str(row.get("caption") or "").strip()
     kind = str(row.get("kind") or "")
-    if kind == "quest" and row.get("activity_key"):
+    if kind in CHALLENGE_MEDIA_KINDS and row.get("activity_key"):
         act = activity_row(df, str(row["activity_key"]))
         if act is not None:
             base = f"Day {int(act['day_num'])} · {act['title']}"
@@ -5572,6 +5609,154 @@ def render_media_thumbnail_grid(
                 st.rerun()
 
 
+def _photo_kind_index(default_kind: str) -> int:
+    kinds = list(PHOTO_KIND_LABELS.keys())
+    return kinds.index(default_kind) if default_kind in kinds else 0
+
+
+def render_photo_upload_panel(
+    key_prefix: str,
+    *,
+    df: pd.DataFrame,
+    partners_df: pd.DataFrame,
+    default_kind: str = MEDIA_KIND_CHALLENGE,
+    default_activity_key: str = "",
+    default_partner_id: int | None = None,
+    default_location: str = "",
+    default_day_num: int | None = None,
+    label: str = "📸 Add a photo",
+    compact: bool = False,
+) -> None:
+    """Upload with photo type — location, challenge, partner, or day — for app thumbnails."""
+    panel_key = f"{key_prefix}_photo_{default_day_num}_{default_activity_key}_{default_partner_id}"
+    kind_key = f"{panel_key}_kind"
+    kind_list = list(PHOTO_KIND_LABELS.keys())
+    if kind_key not in st.session_state:
+        st.session_state[kind_key] = default_kind if default_kind in kind_list else MEDIA_KIND_CHALLENGE
+
+    with st.expander(label, expanded=not compact):
+        photo_kind = st.selectbox(
+            "Photo type",
+            kind_list,
+            index=_photo_kind_index(st.session_state[kind_key]),
+            format_func=lambda k: PHOTO_KIND_LABELS[k],
+            key=kind_key,
+        )
+        activity_key = ""
+        partner_id: int | None = None
+        location = ""
+        day_num = default_day_num
+
+        if photo_kind == MEDIA_KIND_CHALLENGE:
+            day_num = int(default_day_num or 1)
+            day_acts = df[df["day_num"] == day_num].sort_values(["time_slot", "slot_order"])
+            if day_acts.empty:
+                st.caption("No quests on this day.")
+                return
+            act_keys = day_acts["activity_key"].astype(str).tolist()
+            default_act = default_activity_key if default_activity_key in act_keys else act_keys[0]
+            activity_key = st.selectbox(
+                "Challenge / quest",
+                act_keys,
+                index=act_keys.index(default_act),
+                format_func=lambda k, _df=day_acts: quest_pick_label(_df, k),
+                key=f"{panel_key}_challenge",
+            )
+            loc_row = day_acts[day_acts["activity_key"] == activity_key].iloc[0]
+            location = str(loc_row["location"])
+            st.caption("Used as the thumbnail when you pick this challenge.")
+        elif photo_kind == MEDIA_KIND_LOCATION:
+            loc_opts = location_picker_options()
+            default_loc = default_location if default_location in loc_opts else loc_opts[0]
+            location = st.selectbox(
+                "Location",
+                loc_opts,
+                index=loc_opts.index(default_loc),
+                format_func=location_person_label,
+                key=f"{panel_key}_location",
+            )
+            st.caption("Used as the location icon across the app (banners, chips, strips).")
+        elif photo_kind == MEDIA_KIND_PARTNER:
+            if partners_df.empty:
+                st.caption("Log a partner on a quest first, then add their photo here.")
+                return
+            partner_rows = partners_df.sort_values("display_name")
+            partner_ids = [int(x) for x in partner_rows["id"].tolist()]
+            default_pid = default_partner_id if default_partner_id in partner_ids else partner_ids[0]
+            partner_id = st.selectbox(
+                "Partner",
+                partner_ids,
+                index=partner_ids.index(default_pid),
+                format_func=lambda pid, _p=partner_rows: str(
+                    _p[_p["id"] == pid].iloc[0]["display_name"]
+                ),
+                key=f"{panel_key}_partner",
+            )
+            st.caption("Used as their avatar in partner logs and the Partners tab.")
+        else:
+            day_num = st.number_input(
+                "Day",
+                min_value=1,
+                max_value=TOTAL_DAYS,
+                value=int(default_day_num or 1),
+                key=f"{panel_key}_day",
+            )
+            st.caption("General day memory — appears in the slideshow.")
+
+        existing = filter_journey_media(
+            kind=photo_kind,
+            activity_key=activity_key or None,
+            partner_id=partner_id,
+            location=location or None,
+            day_num=day_num if photo_kind == MEDIA_KIND_DAY else day_num,
+        )
+        if not existing.empty:
+            render_media_thumbnail_grid(existing, f"{panel_key}_{photo_kind}_grid")
+
+        caption = st.text_input("Caption (optional)", key=f"{panel_key}_cap")
+        uploaded = st.file_uploader(
+            "Choose photo(s)",
+            type=["jpg", "jpeg", "png", "webp", "gif"],
+            accept_multiple_files=True,
+            key=f"{panel_key}_up",
+            label_visibility="collapsed",
+        )
+        st.caption(
+            "JPG/PNG/WEBP/GIF · up to 8 MB · saved on this device. "
+            "Location & partner photos become app thumbnails automatically."
+        )
+        if uploaded and st.button(
+            "Save photos",
+            key=f"{panel_key}_save",
+            type="primary",
+            use_container_width=True,
+        ):
+            save_kind = MEDIA_KIND_CHALLENGE if photo_kind == MEDIA_KIND_CHALLENGE else photo_kind
+            saved = 0
+            errors: list[str] = []
+            for file in uploaded:
+                ok, msg = save_journey_media(
+                    file.getvalue(),
+                    file.name,
+                    kind=save_kind,
+                    activity_key=activity_key,
+                    partner_id=partner_id,
+                    location=location,
+                    day_num=day_num,
+                    caption=caption,
+                )
+                if ok:
+                    saved += 1
+                else:
+                    errors.append(f"{file.name}: {msg}")
+            if saved:
+                st.toast(f"Saved {saved} photo{'s' if saved != 1 else ''} 📸")
+            if errors:
+                st.warning("Some photos were skipped: " + "; ".join(errors[:3]))
+            if saved:
+                st.rerun()
+
+
 def render_media_upload_section(
     key_prefix: str,
     *,
@@ -5582,10 +5767,27 @@ def render_media_upload_section(
     day_num: int | None = None,
     label: str = "📸 Add photos",
     compact: bool = False,
+    df: pd.DataFrame | None = None,
+    partners_df: pd.DataFrame | None = None,
 ) -> None:
+    mapped_kind = MEDIA_KIND_CHALLENGE if kind in CHALLENGE_MEDIA_KINDS else kind
+    if df is not None and partners_df is not None:
+        render_photo_upload_panel(
+            key_prefix,
+            df=df,
+            partners_df=partners_df,
+            default_kind=mapped_kind,
+            default_activity_key=activity_key,
+            default_partner_id=partner_id,
+            default_location=location,
+            default_day_num=day_num,
+            label=label,
+            compact=compact,
+        )
+        return
     scope_key = f"{kind}_{activity_key}_{partner_id}_{location}_{day_num}"
     existing = filter_journey_media(
-        kind=kind,
+        kind=mapped_kind,
         activity_key=activity_key or None,
         partner_id=partner_id,
         location=location or None,
@@ -5604,23 +5806,19 @@ def render_media_upload_section(
             key=up_key,
             label_visibility="collapsed",
         )
-        st.caption(
-            "JPG/PNG/WEBP/GIF · up to 8 MB each · saved with your journey on this device. "
-            "Export or back up photos separately if you redeploy the app."
-        )
         if uploaded and st.button(
             "Save photos",
             key=f"{key_prefix}_media_save_{scope_key}",
             type="primary",
             use_container_width=True,
         ):
+            save_kind = MEDIA_KIND_CHALLENGE if kind in CHALLENGE_MEDIA_KINDS else kind
             saved = 0
-            errors: list[str] = []
             for file in uploaded:
-                ok, msg = save_journey_media(
+                ok, _ = save_journey_media(
                     file.getvalue(),
                     file.name,
-                    kind=kind,
+                    kind=save_kind,
                     activity_key=activity_key,
                     partner_id=partner_id,
                     location=location,
@@ -5629,13 +5827,8 @@ def render_media_upload_section(
                 )
                 if ok:
                     saved += 1
-                else:
-                    errors.append(f"{file.name}: {msg}")
             if saved:
                 st.toast(f"Saved {saved} photo{'s' if saved != 1 else ''} 📸")
-            if errors:
-                st.warning("Some photos were skipped: " + "; ".join(errors[:3]))
-            if saved:
                 st.rerun()
 
 
