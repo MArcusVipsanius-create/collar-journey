@@ -3316,6 +3316,104 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
 .cj-stats-hero-text h4 {
     font-family: Fredoka, sans-serif; margin: 0; color: #ffc800; font-size: 1.05rem;
 }
+
+/* ── iPhone / mobile ── */
+@supports (padding: env(safe-area-inset-bottom)) {
+    .stApp {
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
+@media (max-width: 768px) {
+    .block-container {
+        padding-top: 0.35rem;
+        padding-left: 0.65rem;
+        padding-right: 0.65rem;
+        max-width: 100%;
+    }
+    .stButton > button {
+        min-height: 48px;
+        font-size: 1rem;
+        font-weight: 700;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+    div[data-testid="stRadio"] > div[role="radiogroup"] {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        gap: 0.35rem;
+        padding-bottom: 0.35rem;
+        scrollbar-width: none;
+    }
+    div[data-testid="stRadio"] > div[role="radiogroup"]::-webkit-scrollbar { display: none; }
+    div[data-testid="stRadio"] label {
+        min-height: 44px;
+        min-width: 3.2rem;
+        padding: 0.45rem 0.65rem !important;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    div[data-testid="stRadio"] label p {
+        font-size: 0.82rem !important;
+    }
+    .cj-rich-bar {
+        flex-wrap: wrap;
+        gap: 0.65rem;
+        padding: 0.65rem 0.75rem;
+        border-radius: 16px;
+    }
+    .cj-rich-bar-title { font-size: 1rem; }
+    .cj-rich-bar-sub { font-size: 0.72rem; }
+    .cj-rich-chip { font-size: 0.68rem; padding: 0.22rem 0.45rem; }
+    .cj-rich-cal-day { min-height: 108px; border-radius: 12px; }
+    .cj-rich-cal-num { font-size: 1.2rem; }
+    .cj-rich-cal-icons { font-size: 0.65rem; }
+    .cj-cal-week-label { font-size: 0.88rem; margin: 0.75rem 0 0.35rem; }
+    .nice-entry-row {
+        padding: 0.65rem 0.7rem;
+        gap: 0.65rem;
+    }
+    .nice-entry-photo {
+        width: 64px;
+        height: 64px;
+        border-radius: 14px;
+    }
+    .nice-entry-title { font-size: 0.95rem; }
+    .nice-entry-meta { font-size: 0.75rem; }
+    .nice-stat-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.45rem;
+    }
+    .nice-stat-value { font-size: 1.25rem; }
+    .cj-quest-pick-tile-img,
+    .cj-quest-pick-tile-emoji { height: 150px; }
+    .cj-quest-hero.featured,
+    .cj-quest-scene .cj-quest-hero { height: 180px; }
+    .cj-qakc-solo.featured { max-width: 100%; height: 220px; }
+    .dl-hud { gap: 0.4rem; }
+    .dl-pill { min-width: calc(50% - 0.25rem); flex: 1 1 calc(50% - 0.25rem); }
+    .dl-hero, .cj-brand-hero { flex-direction: column; text-align: center; padding: 0.85rem; }
+    .cj-quest-nav-title {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+        font-size: 0.82rem;
+    }
+    div[data-testid="stExpander"] details summary {
+        min-height: 44px;
+        font-size: 0.95rem;
+    }
+    input, textarea, select {
+        font-size: 16px !important;
+    }
+}
+@media (max-width: 390px) {
+    .cj-rich-cal-day { min-height: 96px; }
+    .nice-stat-grid { grid-template-columns: 1fr 1fr; }
+}
 </style>
 """
 
@@ -6841,32 +6939,33 @@ def render_nice_calendar_week(
     journey_day: int,
     view_day: int,
 ) -> None:
-    """Photo-rich clickable week row."""
-    dow_labels = st.columns(7)
-    for col, day_num in zip(dow_labels, week_days):
-        cal_date = journey_date(settings, day_num)
-        with col:
-            st.markdown(
-                f"<div class='nice-cal-dow'>{cal_date.strftime('%a')}</div>",
-                unsafe_allow_html=True,
-            )
-    pick_cols = st.columns(7)
-    for col, day_num in zip(pick_cols, week_days):
-        summary = summaries[day_num - 1]
-        cal_date = journey_date(settings, day_num)
-        with col:
-            st.markdown(
-                rich_cal_day_card_html(summary, cal_date, day_num, journey_day, view_day),
-                unsafe_allow_html=True,
-            )
-            if st.button(
-                "▶ Open" if day_num == view_day else "Open",
-                key=f"nice_cal_{day_num}",
-                use_container_width=True,
-                type="primary" if day_num == view_day else "secondary",
-            ):
-                st.session_state.cal_day_pick = day_num
-                st.rerun()
+    """Photo-rich clickable week — 2-column grid (readable on iPhone)."""
+    days = list(week_days)
+    for i in range(0, len(days), 2):
+        cols = st.columns(2, gap="small")
+        for j, col in enumerate(cols):
+            if i + j >= len(days):
+                break
+            day_num = days[i + j]
+            summary = summaries[day_num - 1]
+            cal_date = journey_date(settings, day_num)
+            with col:
+                st.markdown(
+                    f"<div class='nice-cal-dow'>{cal_date.strftime('%a %b %d')}</div>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    rich_cal_day_card_html(summary, cal_date, day_num, journey_day, view_day),
+                    unsafe_allow_html=True,
+                )
+                if st.button(
+                    "▶ Open" if day_num == view_day else "Open",
+                    key=f"nice_cal_{day_num}",
+                    use_container_width=True,
+                    type="primary" if day_num == view_day else "secondary",
+                ):
+                    st.session_state.cal_day_pick = day_num
+                    st.rerun()
 
 
 def render_stats_view(
@@ -7285,7 +7384,7 @@ def render_day_quest_nav(
         if pick_key not in st.session_state or st.session_state[pick_key] not in pending_keys:
             st.session_state[pick_key] = pending_keys[0]
         st.markdown('<div class="cj-quest-section-label">🎯 To complete — tap a quest</div>', unsafe_allow_html=True)
-        ncols = min(len(pending_keys), 3)
+        ncols = min(len(pending_keys), 2)
         cols = st.columns(ncols)
         for i, key in enumerate(pending_keys):
             row = pending_df[pending_df["activity_key"] == key].iloc[0]

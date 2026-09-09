@@ -70,10 +70,25 @@ def password_gate(app_name: str = "Collar Journey") -> None:
 
     st.markdown(
         f"""
-<div style="max-width:420px;margin:3rem auto 0;padding:0 1rem;">
-  <h2 style="margin-bottom:0.25rem;">{app_name}</h2>
-  <p style="color:#666;margin-bottom:1.25rem;">Enter the shared password to continue.</p>
+<div class="cj-login-wrap">
+  <h2 class="cj-login-title">{app_name}</h2>
+  <p class="cj-login-sub">Enter the shared password to continue.</p>
 </div>
+<style>
+.cj-login-wrap {{
+  max-width: 420px; margin: 2rem auto 0; padding: 0 1rem;
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}}
+.cj-login-title {{ margin-bottom: 0.25rem; font-size: 1.5rem; }}
+.cj-login-sub {{ color: #666; margin-bottom: 1.25rem; font-size: 1rem; }}
+@media (max-width: 768px) {{
+  .cj-login-wrap {{ margin-top: 1.25rem; }}
+  .cj-login-title {{ font-size: 1.35rem; }}
+  div[data-testid="stForm"] input {{ font-size: 16px !important; min-height: 48px; }}
+  div[data-testid="stForm"] button {{ min-height: 52px; font-size: 1.05rem; }}
+}}
+</style>
 """,
         unsafe_allow_html=True,
     )
