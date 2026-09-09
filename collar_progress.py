@@ -6143,7 +6143,7 @@ def media_slide_label(
     if kind in CHALLENGE_MEDIA_KINDS and row.get("activity_key"):
         act = activity_row(df, str(row["activity_key"]))
         if act is not None:
-            base = f"Day {int(act['day_num'])} · {act['title']}"
+            base = quest_tag_label(df, str(row["activity_key"]))
             return f"{base} — {caption}" if caption else base
     if kind == "partner" and pd.notna(row.get("partner_id")):
         prow = partner_row(partners_df, int(row["partner_id"]))
@@ -6252,7 +6252,6 @@ def render_photo_upload_panel(
             )
             quest_row = all_acts[all_acts["activity_key"] == activity_key].iloc[0]
             location = str(quest_row["location"])
-            day_num = int(quest_row["day_num"])
             st.caption("Used as the thumbnail when you pick this quest.")
         elif photo_kind == MEDIA_KIND_LOCATION:
             loc_opts = location_picker_options()
@@ -6323,6 +6322,7 @@ def render_photo_upload_panel(
             save_kind = MEDIA_KIND_CHALLENGE if photo_kind == MEDIA_KIND_CHALLENGE else photo_kind
             saved = 0
             errors: list[str] = []
+            save_day = day_num if photo_kind == MEDIA_KIND_DAY else None
             for file in uploaded:
                 ok, msg = save_journey_media(
                     file.getvalue(),
@@ -6331,7 +6331,7 @@ def render_photo_upload_panel(
                     activity_key=activity_key,
                     partner_id=partner_id,
                     location=location,
-                    day_num=day_num,
+                    day_num=save_day,
                     caption=caption,
                 )
                 if ok:
@@ -6559,6 +6559,7 @@ def render_media_upload_section(
         ):
             save_kind = MEDIA_KIND_CHALLENGE if kind in CHALLENGE_MEDIA_KINDS else kind
             saved = 0
+            save_day = day_num if mapped_kind == MEDIA_KIND_DAY else None
             for file in uploaded:
                 ok, _ = save_journey_media(
                     file.getvalue(),
@@ -6567,7 +6568,7 @@ def render_media_upload_section(
                     activity_key=activity_key,
                     partner_id=partner_id,
                     location=location,
-                    day_num=day_num,
+                    day_num=save_day,
                     caption=caption,
                 )
                 if ok:
@@ -9299,12 +9300,17 @@ def quest_pick_label(day_df: pd.DataFrame, activity_key: str) -> str:
     return f"{mark} {row['title']} · {slot} · {activity_xp_badge(row)}"
 
 
-def quest_pick_label_all(df: pd.DataFrame, activity_key: str) -> str:
-    """Quest label for photo tagging — all days in one list."""
+def quest_tag_label(df: pd.DataFrame, activity_key: str) -> str:
+    """Quest-only label for photo tags — no day prefix."""
     row = df[df["activity_key"] == activity_key].iloc[0]
     mark = "✅" if row["status"] == "earned" else "🎯"
     slot = time_slot_label(str(row["time_slot"]))
-    return f"Day {int(row['day_num'])} · {mark} {row['title']} · {slot}"
+    return f"{mark} {row['title']} · {slot}"
+
+
+def quest_pick_label_all(df: pd.DataFrame, activity_key: str) -> str:
+    """Quest picker label when choosing from all quests."""
+    return quest_tag_label(df, activity_key)
 
 
 def day_pending_point_total(day_df: pd.DataFrame) -> float:
