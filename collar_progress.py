@@ -1098,25 +1098,28 @@ def quest_day_tile_html(row, selected: bool = False) -> str:
     else:
         media = f'<div class="cj-quest-day-tile-emoji">{meta.get("icon", "📍")}</div>'
     chip = "✅" if is_earned else activity_xp_badge(row)
+    short = str(row["title"])
+    if len(short) > 28:
+        short = short[:26] + "…"
+    slot = time_slot_label(str(row["time_slot"]))
     return (
         f'<div class="{" ".join(css)}">'
         f"{media}"
         f'<span class="cj-quest-day-tile-chip">{chip}</span>'
+        f'<div class="cj-quest-day-tile-foot">'
+        f'<div class="cj-quest-day-tile-title">{short}</div>'
+        f'<div class="cj-quest-day-tile-slot">{slot}</div>'
+        f"</div>"
         f"</div>"
     )
 
 
 def quest_day_tile_button_label(row, is_open: bool) -> str:
-    short = str(row["title"])
-    if len(short) > 32:
-        short = short[:30] + "…"
-    slot = time_slot_label(str(row["time_slot"]))
-    xp = activity_xp_badge(row)
     if is_open:
-        return f"▲ Close · {short}"
+        return "▲ Close"
     if row["status"] == "earned":
-        return f"✅ {short} · {slot}"
-    return f"🎯 {short} · {slot} · {xp}"
+        return "View / edit"
+    return "Open quest"
 
 
 def quest_done_compact_html(row, selected: bool = False) -> str:
@@ -3444,11 +3447,35 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
 .cj-quest-pick-slot { font-size: 0.62rem; font-weight: 700; color: var(--dl-muted); }
 
 .cj-quest-day-grid { margin: 0.15rem 0 0.65rem; }
+.cj-quest-grid-wrap { margin-bottom: 0.15rem; }
+div[data-testid="stHorizontalBlock"]:has(.cj-quest-day-tile) {
+    gap: 0.45rem !important;
+    align-items: stretch !important;
+}
+div[data-testid="stHorizontalBlock"]:has(.cj-quest-day-tile) > div[data-testid="column"] {
+    min-width: 0;
+}
 .cj-quest-day-tile {
     position: relative;
-    border: 2px solid var(--dl-border); border-radius: 16px 16px 0 0;
+    border: 2px solid var(--dl-border); border-radius: 12px 12px 0 0;
     overflow: hidden; background: white;
     box-shadow: var(--dl-shadow-sm);
+    height: 100%;
+}
+.cj-quest-day-tile-foot {
+    padding: 0.32rem 0.42rem 0.38rem;
+    background: #fff;
+    border-top: 1px solid rgba(0,0,0,0.06);
+}
+.cj-quest-day-tile-title {
+    font-family: Fredoka, sans-serif; font-size: 0.7rem; font-weight: 700;
+    color: var(--dl-text); line-height: 1.2;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; min-height: 1.65em;
+}
+.cj-quest-day-tile-slot {
+    font-size: 0.58rem; font-weight: 700; color: var(--dl-muted); margin-top: 0.1rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cj-quest-day-tile-chip {
     position: absolute; top: 0.4rem; right: 0.4rem;
@@ -3471,16 +3498,23 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
     box-shadow: 0 0 0 2px rgba(88,204,2,0.2);
 }
 .cj-quest-day-tile-img {
-    width: 100%; height: 112px; object-fit: cover; object-position: center top;
+    width: 100%; height: 88px; object-fit: cover; object-position: center top;
     display: block;
 }
 .cj-quest-day-tile-emoji {
-    height: 112px; display: flex; align-items: center; justify-content: center;
-    font-size: 2.4rem; background: var(--dl-bg-soft);
+    height: 88px; display: flex; align-items: center; justify-content: center;
+    font-size: 2rem; background: var(--dl-bg-soft);
 }
+div[data-testid="column"] div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButton"],
 div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButton"] {
     margin-top: -0.35rem;
-    margin-bottom: 0.7rem;
+    margin-bottom: 0.55rem;
+}
+div[data-testid="column"] div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButton"] button,
+div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButton"] button {
+    min-height: 36px;
+    font-size: 0.68rem;
+    padding: 0.25rem 0.4rem;
 }
 div[data-testid="stMarkdown"]:has(.cj-quest-day-tile.selected) + div[data-testid="stButton"] {
     margin-bottom: 0;
@@ -3745,6 +3779,19 @@ div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark.done) + div[data-te
 }
 .cj-rich-chip.xp { background: rgba(255,200,0,0.22); border-color: rgba(255,200,0,0.45); color: #ffe082; }
 .cj-rich-chip.hot { background: rgba(255,150,0,0.2); border-color: rgba(255,150,0,0.4); color: #ffd699; }
+.cj-more-intro {
+    margin: 0 0 0.75rem; padding: 0.65rem 0.85rem;
+    border-radius: 14px; border: 2px solid var(--dl-border);
+    background: linear-gradient(135deg, #faf8fc 0%, #fff 100%);
+}
+.cj-more-intro-title {
+    font-family: Fredoka, sans-serif; font-size: 1rem; font-weight: 700;
+    color: var(--dl-text);
+}
+.cj-more-intro-sub {
+    font-size: 0.78rem; font-weight: 600; color: var(--dl-muted);
+    margin-top: 0.15rem; line-height: 1.4;
+}
 
 .cj-rich-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.45rem; margin-bottom: 0.35rem; }
 .cj-rich-cal-day {
@@ -4070,7 +4117,9 @@ div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark.done) + div[data-te
     .cj-quest-pick-tile-img,
     .cj-quest-pick-tile-emoji { height: 150px; }
     .cj-quest-day-tile-img,
-    .cj-quest-day-tile-emoji { height: 118px; }
+    .cj-quest-day-tile-emoji { height: 76px; }
+    .cj-quest-day-tile-title { font-size: 0.66rem; }
+    .cj-quest-day-tile-slot { font-size: 0.54rem; }
     .cj-quest-hero.featured,
     .cj-quest-scene .cj-quest-hero { height: 180px; }
     .cj-qakc-solo.featured { max-width: 100%; height: 220px; }
@@ -8392,9 +8441,16 @@ def render_header(
     *,
     compact: bool = False,
     nice: bool = False,
+    show_level_bar: bool = True,
 ):
     if nice:
-        render_nice_app_bar(settings, journey_day, stats, partner_summary)
+        render_nice_app_bar(
+            settings,
+            journey_day,
+            stats,
+            partner_summary,
+            show_level_bar=show_level_bar,
+        )
         if stats["collar_earned"]:
             st.markdown(
                 """
@@ -8634,6 +8690,8 @@ def render_nice_app_bar(
     journey_day: int,
     stats: dict | None = None,
     partner_summary: dict | None = None,
+    *,
+    show_level_bar: bool = True,
 ):
     """Flanked banner — full-height Day 1 / Arrivée photos, content + bar in center."""
     name = settings.get("display_name", "Her journey")
@@ -8653,8 +8711,9 @@ def render_nice_app_bar(
             f'<span class="cj-rich-chip">📅 Day {journey_day}/{TOTAL_DAYS}</span>'
             f"</div>"
         )
-        level, level_desc, _ = level_for_pct(stats.get("pct", 0))
-        bar = level_progress_bar_only_html(stats, level, level_desc, dark=True)
+        if show_level_bar:
+            level, level_desc, _ = level_for_pct(stats.get("pct", 0))
+            bar = level_progress_bar_only_html(stats, level, level_desc, dark=True)
     st.markdown(
         f"""
 <div class="cj-rich-bar cj-banner-flanked">
@@ -9307,8 +9366,41 @@ def scroll_open_quest_panel_into_view() -> None:
 def _sorted_quest_keys(day_df: pd.DataFrame) -> list[str]:
     ordered = day_df
     if "time_slot" in day_df.columns:
-        ordered = day_df.sort_values(["time_slot", "id"], kind="stable")
+        ordered = day_df.assign(
+            _slot_sort=day_df["time_slot"].map(
+                lambda s: TIME_SLOT_SORT_ORDER.get(str(s), 99)
+            )
+        ).sort_values(["_slot_sort", "id"], kind="stable")
     return ordered["activity_key"].astype(str).tolist()
+
+
+def _pending_by_slot_group(day_df: pd.DataFrame) -> dict[str, list[str]]:
+    pending = day_df[day_df["status"] == "pending"].copy()
+    if pending.empty:
+        return {}
+    if "time_slot" in pending.columns:
+        pending = pending.assign(
+            _slot_sort=pending["time_slot"].map(
+                lambda s: TIME_SLOT_SORT_ORDER.get(str(s), 99)
+            )
+        ).sort_values(["_slot_sort", "id"], kind="stable")
+    grouped: dict[str, list[str]] = {g: [] for g in SLOT_GROUP_ORDER}
+    for _, row in pending.iterrows():
+        grouped[quest_slot_group(str(row["time_slot"]))].append(str(row["activity_key"]))
+    return {g: keys for g, keys in grouped.items() if keys}
+
+
+def _earned_quest_keys(day_df: pd.DataFrame) -> list[str]:
+    earned = day_df[day_df["status"] == "earned"].copy()
+    if earned.empty:
+        return []
+    if "time_slot" in earned.columns:
+        earned = earned.assign(
+            _slot_sort=earned["time_slot"].map(
+                lambda s: TIME_SLOT_SORT_ORDER.get(str(s), 99)
+            )
+        ).sort_values(["_slot_sort", "id"], kind="stable")
+    return earned["activity_key"].astype(str).tolist()
 
 
 def _render_inline_quest_panel(
@@ -9341,6 +9433,125 @@ def _render_inline_quest_panel(
             )
 
 
+def _quest_grid_cols(count: int) -> int:
+    if count <= 1:
+        return 1
+    if count == 2:
+        return 2
+    return 3 if count >= 5 else 2
+
+
+def _render_quest_tile_cell(
+    row,
+    day_num: int,
+    key_prefix: str,
+    open_key: str,
+    open_quest: str | None,
+    *,
+    compact: bool,
+) -> None:
+    key = str(row["activity_key"])
+    is_open = open_quest == key
+    tile_html = quest_done_compact_html(row, is_open) if compact else quest_day_tile_html(row, is_open)
+    st.markdown(tile_html, unsafe_allow_html=True)
+    if st.button(
+        quest_day_tile_button_label(row, is_open),
+        key=f"{key_prefix}_tile_{day_num}_{key}",
+        use_container_width=True,
+        type="primary" if is_open else "secondary",
+    ):
+        if is_open:
+            st.session_state.pop(open_key, None)
+        else:
+            st.session_state[open_key] = key
+        st.rerun()
+
+
+def _render_quest_open_panel(
+    row,
+    day_num: int,
+    key_prefix: str,
+    df: pd.DataFrame | None,
+    partners_df: pd.DataFrame | None,
+    encounters_df: pd.DataFrame | None,
+    sub_pool: pd.DataFrame | None,
+) -> None:
+    if (
+        df is not None
+        and partners_df is not None
+        and encounters_df is not None
+        and sub_pool is not None
+    ):
+        _render_inline_quest_panel(
+            row,
+            df,
+            day_num,
+            key_prefix,
+            partners_df,
+            encounters_df,
+            sub_pool,
+        )
+        scroll_open_quest_panel_into_view()
+    else:
+        st.warning("That quest is no longer available — pick another tile.")
+
+
+def _render_quest_nav_item(
+    row,
+    day_num: int,
+    key_prefix: str,
+    open_key: str,
+    open_quest: str | None,
+    *,
+    compact: bool,
+    df: pd.DataFrame | None,
+    partners_df: pd.DataFrame | None,
+    encounters_df: pd.DataFrame | None,
+    sub_pool: pd.DataFrame | None,
+) -> None:
+    key = str(row["activity_key"])
+    is_open = open_quest == key
+    _render_quest_tile_cell(
+        row, day_num, key_prefix, open_key, open_quest, compact=compact
+    )
+    if is_open:
+        _render_quest_open_panel(
+            row, day_num, key_prefix, df, partners_df, encounters_df, sub_pool
+        )
+
+
+def _render_quest_tile_grid(
+    keys: list[str],
+    day_df: pd.DataFrame,
+    day_num: int,
+    key_prefix: str,
+    open_key: str,
+    open_quest: str | None,
+    *,
+    df: pd.DataFrame | None,
+    partners_df: pd.DataFrame | None,
+    encounters_df: pd.DataFrame | None,
+    sub_pool: pd.DataFrame | None,
+) -> None:
+    """Photo tiles in a 2–3 column grid; open panel spans full width below the grid."""
+    cols_per_row = _quest_grid_cols(len(keys))
+    for i in range(0, len(keys), cols_per_row):
+        chunk = keys[i : i + cols_per_row]
+        cols = st.columns(len(chunk))
+        for col, key in zip(cols, chunk):
+            with col:
+                row = day_df[day_df["activity_key"] == key].iloc[0]
+                _render_quest_tile_cell(
+                    row, day_num, key_prefix, open_key, open_quest, compact=False
+                )
+
+    if open_quest in keys:
+        row = day_df[day_df["activity_key"] == open_quest].iloc[0]
+        _render_quest_open_panel(
+            row, day_num, key_prefix, df, partners_df, encounters_df, sub_pool
+        )
+
+
 def render_day_quest_nav(
     day_df: pd.DataFrame,
     day_num: int,
@@ -9352,7 +9563,7 @@ def render_day_quest_nav(
     encounters_df: pd.DataFrame | None = None,
     sub_pool: pd.DataFrame | None = None,
 ) -> None:
-    """Stacked tiles — expand panel opens directly under the tapped quest."""
+    """Pending quests as photo tiles by time of day; completed quests collapsed below."""
     open_key = f"{key_prefix}_open_quest_{day_num}"
     quest_keys = _sorted_quest_keys(day_df)
     sync_open_quest_state(key_prefix, day_num, quest_keys)
@@ -9360,47 +9571,51 @@ def render_day_quest_nav(
     if not quest_keys:
         return
 
-    st.markdown(
-        '<div class="cj-quest-section-label">🎯 Tap a tile to complete or edit</div>',
-        unsafe_allow_html=True,
-    )
+    pending_groups = _pending_by_slot_group(day_df)
+    earned_keys = _earned_quest_keys(day_df)
     open_quest = st.session_state.get(open_key)
 
-    for key in quest_keys:
-        row = day_df[day_df["activity_key"] == key].iloc[0]
-        is_open = open_quest == key
-        st.markdown(quest_day_tile_html(row, is_open), unsafe_allow_html=True)
-        if st.button(
-            quest_day_tile_button_label(row, is_open),
-            key=f"{key_prefix}_tile_{day_num}_{key}",
-            use_container_width=True,
-            type="primary" if is_open else "secondary",
-        ):
-            if is_open:
-                st.session_state.pop(open_key, None)
-            else:
-                st.session_state[open_key] = key
-            st.rerun()
+    if pending_groups:
+        st.markdown(
+            '<div class="cj-quest-section-label">🎯 Tap a quest to complete</div>',
+            unsafe_allow_html=True,
+        )
+        for group_key in SLOT_GROUP_ORDER:
+            keys = pending_groups.get(group_key, [])
+            if not keys:
+                continue
+            st.markdown(quest_slot_header_html(group_key), unsafe_allow_html=True)
+            _render_quest_tile_grid(
+                keys,
+                day_df,
+                day_num,
+                key_prefix,
+                open_key,
+                open_quest,
+                df=df,
+                partners_df=partners_df,
+                encounters_df=encounters_df,
+                sub_pool=sub_pool,
+            )
 
-        if is_open:
-            if (
-                df is not None
-                and partners_df is not None
-                and encounters_df is not None
-                and sub_pool is not None
-            ):
-                _render_inline_quest_panel(
+    if earned_keys:
+        label = f"✅ Completed ({len(earned_keys)})"
+        with st.expander(label, expanded=bool(not pending_groups)):
+            st.caption("Tap to review notes, partners, or edit.")
+            for key in earned_keys:
+                row = day_df[day_df["activity_key"] == key].iloc[0]
+                _render_quest_nav_item(
                     row,
-                    df,
                     day_num,
                     key_prefix,
-                    partners_df,
-                    encounters_df,
-                    sub_pool,
+                    open_key,
+                    open_quest,
+                    compact=True,
+                    df=df,
+                    partners_df=partners_df,
+                    encounters_df=encounters_df,
+                    sub_pool=sub_pool,
                 )
-                scroll_open_quest_panel_into_view()
-            else:
-                st.warning("That quest is no longer available — pick another tile.")
 
 
 def _render_quest_log_panel(
@@ -9817,6 +10032,17 @@ def render_more_view(
     partners_df: pd.DataFrame,
     settings: dict,
 ) -> None:
+    st.markdown(
+        """
+<div class="cj-more-intro">
+  <div class="cj-more-intro-title">More tools</div>
+  <div class="cj-more-intro-sub">
+    Partner ledger, quest swaps, and app settings — everything that isn’t daily play lives here.
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
     choice = st.radio(
         "MoreMenu",
         ["👥 Partners", "🔄 Swap", "⚙️ Settings"],
@@ -9958,6 +10184,7 @@ def main():
             journey_day,
             partner_summary,
             nice=True,
+            show_level_bar=selected_tab != TAB_TODAY,
         )
 
     if selected_tab == TAB_TODAY:
