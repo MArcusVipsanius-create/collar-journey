@@ -2592,6 +2592,40 @@ div[data-testid="stToolbar"] { display: none; }
     margin-bottom: 1rem;
     display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;
 }
+.cj-journey-unified-hero {
+    display: flex; align-items: stretch; gap: 0.65rem;
+    background: linear-gradient(135deg, #FFFFFF 0%, #F0FFE4 100%);
+    border: 3px solid var(--dl-green-dark);
+    border-radius: 20px;
+    padding: 0.7rem 0.8rem;
+    box-shadow: 0 5px 0 var(--dl-green-dark);
+    margin-bottom: 0.85rem;
+}
+.cj-journey-unified-body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.cj-journey-unified-photo {
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+}
+.cj-journey-unified-stats {
+    color: var(--dl-muted); font-size: 0.74rem; font-weight: 700;
+    margin-top: 0.12rem; line-height: 1.35;
+}
+.cj-journey-unified-today {
+    font-size: 0.72rem; font-weight: 600; color: #555;
+    margin-top: 0.25rem; line-height: 1.3;
+}
+.cj-journey-unified-hero .dl-path-hero-title {
+    font-size: 1.25rem; line-height: 1.12;
+}
+.cj-journey-unified-hero .dl-collar-trail {
+    margin: 0.32rem 0 0.1rem; justify-content: flex-start; gap: 0.14rem;
+}
+.cj-journey-unified-hero .dl-collar-seg {
+    width: 17px; height: 17px; font-size: 0.48rem;
+}
+.cj-journey-unified-hero .dl-collar-end { font-size: 1.15rem; margin-left: 0.15rem; }
+.cj-journey-unified-hero .cj-brand-frame {
+    box-shadow: 0 6px 18px rgba(70,163,2,0.28), 0 0 0 2px rgba(88,204,2,0.22);
+}
 .dl-path-hero-title {
     font-family: Fredoka, sans-serif; font-size: 1.75rem; font-weight: 700;
     color: var(--dl-green-dark); line-height: 1.15;
@@ -3302,6 +3336,39 @@ div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButto
     font-size: 0.78rem;
     font-weight: 700;
 }
+div[data-testid="stMarkdown"]:has(.cj-quest-day-tile.selected) + div[data-testid="stButton"] button {
+    border-radius: 0;
+    border-bottom: none;
+    margin-bottom: 0;
+}
+.cj-quest-tile-expand-mark {
+    margin: 0 0 -0.35rem;
+    padding: 0.45rem 0.65rem 0.35rem;
+    border: 2px solid var(--dl-orange);
+    border-bottom: none;
+    border-radius: 0;
+    background: linear-gradient(180deg, rgba(255,248,225,0.95) 0%, #fff 100%);
+    font-family: Fredoka, sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--dl-text);
+}
+.cj-quest-tile-expand-mark.done {
+    border-color: rgba(88,204,2,0.65);
+    background: linear-gradient(180deg, rgba(240,255,228,0.95) 0%, #fff 100%);
+}
+div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark) + div[data-testid="stVerticalBlockBorderWrapper"] {
+    margin-top: 0 !important;
+    margin-bottom: 0.85rem !important;
+}
+div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark) + div[data-testid="stVerticalBlockBorderWrapper"] > div {
+    border-color: var(--dl-orange) !important;
+    border-top: none !important;
+    border-radius: 0 0 16px 16px !important;
+}
+div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark.done) + div[data-testid="stVerticalBlockBorderWrapper"] > div {
+    border-color: rgba(88,204,2,0.65) !important;
+}
 .cj-quest-expand-panel {
     border: 2px solid var(--dl-orange); border-radius: 18px;
     padding: 0.85rem 0.9rem 0.5rem; margin: 0.35rem 0 0.85rem;
@@ -3318,6 +3385,60 @@ div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButto
     transform: rotate(-2deg);
 }
 .cj-day-venue-strip .cj-polaroid:nth-child(even) { transform: rotate(2deg); }
+
+.cj-photos-collage {
+    position: relative; display: flex; gap: 0.3rem;
+    height: 128px; margin-bottom: 0.75rem;
+    border-radius: 18px; overflow: hidden;
+    border: 2px solid #3d2548;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+    background: linear-gradient(135deg, #1a1020 0%, #2d1838 55%, #1f1528 100%);
+}
+.cj-photos-collage.empty {
+    height: 76px; align-items: center; justify-content: center;
+    color: #c9b8d4; font-family: Fredoka, sans-serif;
+    font-size: 0.82rem; font-weight: 700; text-align: center;
+    padding: 0 1rem; line-height: 1.35;
+}
+.cj-photos-collage.single .cj-photos-collage-main.full { flex: 1; height: 100%; }
+.cj-photos-collage.duo { gap: 0.25rem; }
+.cj-photos-collage.duo .cj-photos-collage-main { flex: 1; height: 100%; }
+.cj-photos-collage-main {
+    flex: 1.2; min-width: 0; height: 100%; overflow: hidden;
+}
+.cj-photos-collage-main img {
+    width: 100%; height: 100%; object-fit: cover; object-position: center;
+    display: block;
+}
+.cj-photos-collage-side {
+    flex: 1; min-width: 0; height: 100%;
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr); gap: 0.22rem;
+    padding: 0.22rem 0.22rem 0.22rem 0;
+}
+.cj-photos-collage-tile {
+    overflow: hidden; border-radius: 7px;
+    border: 2px solid rgba(255,255,255,0.82);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.28);
+    transform: rotate(var(--rot, 0deg));
+}
+.cj-photos-collage-tile img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.cj-photos-collage-count {
+    position: absolute; bottom: 0.38rem; right: 0.45rem; z-index: 2;
+    background: rgba(0,0,0,0.58); color: #fff;
+    font-family: Fredoka, sans-serif;
+    font-size: 0.66rem; font-weight: 800;
+    padding: 0.14rem 0.42rem; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.25);
+}
+.cj-photos-collage-more {
+    position: absolute; top: 0.38rem; left: 0.45rem; z-index: 2;
+    background: rgba(255,200,0,0.88); color: #5C4A00;
+    font-family: Fredoka, sans-serif; font-size: 0.62rem; font-weight: 800;
+    padding: 0.12rem 0.38rem; border-radius: 999px;
+}
 
 .cj-quest-scene-inner { position: relative; z-index: 1; padding: 0.15rem; }
 .cj-quest-scene .dl-quest.focused {
@@ -3485,7 +3606,15 @@ div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButto
 }
 .cj-rich-cal-track-icons {
     position: relative; z-index: 1; display: flex; justify-content: space-between;
-    align-items: center; height: 20px; gap: 1px;
+    align-items: center; height: 20px; gap: 4px;
+}
+.cj-rich-cal-track-icons.split { align-items: flex-start; height: 22px; }
+.cj-rich-cal-track-pending {
+    display: flex; flex-wrap: wrap; gap: 2px; flex: 1; min-width: 0; align-items: center;
+}
+.cj-rich-cal-track-done {
+    display: flex; flex-wrap: wrap; gap: 2px; justify-content: flex-end;
+    align-items: center; flex-shrink: 0; max-width: 58%;
 }
 .cj-rich-cal-qicon {
     font-size: 0.58rem; width: 16px; height: 16px; flex: 0 0 16px;
@@ -3494,9 +3623,37 @@ div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButto
     border: 1px solid rgba(255,255,255,0.35); line-height: 1;
 }
 .cj-rich-cal-qicon.done {
-    background: rgba(88,204,2,0.9); border-color: rgba(255,255,255,0.8);
+    background: #58cc02; border-color: rgba(255,255,255,0.92);
+    box-shadow: 0 0 0 1px rgba(70,163,2,0.55), 0 2px 5px rgba(88,204,2,0.45);
 }
-.cj-rich-cal-qicon.pending { opacity: 0.5; filter: grayscale(0.35); }
+.cj-rich-cal-track-done .cj-rich-cal-qicon.done {
+    width: 18px; height: 18px; flex-basis: 18px; font-size: 0.62rem;
+}
+.cj-rich-cal-qicon.pending { opacity: 0.45; filter: grayscale(0.4); }
+.cj-rich-cal-done-badge {
+    position: absolute; top: 0.5rem; right: 0.55rem; z-index: 2;
+    background: linear-gradient(145deg, #58cc02 0%, #46a302 100%);
+    color: #fff; border-radius: 12px;
+    padding: 0.22rem 0.5rem 0.26rem;
+    font-family: Fredoka, sans-serif; font-weight: 800;
+    box-shadow: 0 3px 12px rgba(88,204,2,0.5), 0 0 0 2px rgba(255,255,255,0.55);
+    text-shadow: none; line-height: 1.05; text-align: center;
+    min-width: 3.1rem;
+}
+.cj-rich-cal-done-main { font-size: 0.88rem; letter-spacing: 0.01em; }
+.cj-rich-cal-done-sub {
+    font-size: 0.52rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.06em; opacity: 0.92;
+}
+.cj-rich-cal-done-badge.zero {
+    background: rgba(255,255,255,0.14);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.28);
+    color: rgba(255,255,255,0.82);
+}
+.cj-rich-cal-done-badge.complete {
+    background: linear-gradient(145deg, #89e219 0%, #58cc02 100%);
+    box-shadow: 0 3px 14px rgba(137,226,25,0.55), 0 0 0 2px rgba(255,255,255,0.65);
+}
 .cj-rich-cal-kicker {
     font-family: Fredoka, sans-serif;
     font-size: 1.05rem;
@@ -3512,8 +3669,8 @@ div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButto
 }
 .cj-rich-cal-day.hero .cj-rich-cal-kicker { font-size: 1.15rem; }
 .cj-rich-cal-day.hero .cj-rich-cal-meta { font-size: 0.78rem; margin-bottom: 0.2rem; }
-.cj-rich-cal-day.hero .cj-rich-cal-inner { padding: 0.75rem 0.85rem 0.65rem; }
-.cj-journey-mobile-summary { display: none; }
+.cj-rich-cal-day.hero .cj-rich-cal-inner { padding: 0.75rem 4.6rem 0.65rem 0.85rem; }
+.cj-rich-cal-day.hero .cj-rich-cal-kicker { padding-right: 0.15rem; }
 
 .nice-app-bar {
     display: flex; justify-content: space-between; align-items: baseline;
@@ -3768,18 +3925,13 @@ div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButto
         box-shadow: 0 4px 18px rgba(88,204,2,0.35);
     }
     /* Journey path — compact on phone */
-    .cj-journey-mobile-summary { display: block; }
     .dl-adventure-map { display: none !important; }
     .dl-path-node-card { margin-bottom: 0.45rem; }
-    .cj-journey-mobile-summary {
-        background: white;
-        border: 2px solid var(--dl-border);
-        border-radius: 14px;
-        padding: 0.75rem;
-        margin-bottom: 0.75rem;
-        font-size: 0.88rem;
-        font-weight: 700;
-    }
+    .cj-journey-unified-hero { padding: 0.62rem 0.68rem; gap: 0.5rem; }
+    .cj-journey-unified-hero .dl-path-hero-title { font-size: 1.08rem; }
+    .cj-journey-unified-stats { font-size: 0.68rem; }
+    .cj-journey-unified-hero .dl-collar-seg { width: 15px; height: 15px; font-size: 0.42rem; }
+    .cj-journey-unified-hero .dl-collar-end { font-size: 1rem; }
     /* Hide wide tables on phone — cards remain */
     div[data-testid="stDataFrame"],
     div[data-testid="stArrowDataFrame"] {
@@ -3829,6 +3981,8 @@ div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButto
         z-index: 951;
         margin-bottom: 0.35rem;
     }
+    .cj-photos-collage { height: 108px; }
+    .cj-photos-collage.empty { height: 64px; font-size: 0.76rem; }
 }
 .cj-quick-complete-bar {
     background: linear-gradient(135deg, #e8f8e8 0%, #d4f5d4 100%);
@@ -5972,16 +6126,88 @@ def render_tagged_media_library(
                 st.rerun()
 
 
+def _collage_items_from_media(media: pd.DataFrame, limit: int = 8) -> list[dict]:
+    items: list[dict] = []
+    if media.empty:
+        return items
+    for _, row in media.iloc[::-1].iterrows():
+        uri = media_data_uri(str(row["filename"]))
+        if uri:
+            items.append({"uri": uri})
+        if len(items) >= limit:
+            break
+    return items
+
+
+def photos_collage_html(items: list[dict], total_count: int) -> str:
+    if not items:
+        return (
+            '<div class="cj-photos-collage empty">'
+            "📸 Your collage grows here as you add photos below"
+            "</div>"
+        )
+    count_lbl = f"{total_count} photo{'s' if total_count != 1 else ''}"
+    extra = total_count - len(items)
+    extra_badge = (
+        f'<div class="cj-photos-collage-more">+{extra} more</div>' if extra > 0 else ""
+    )
+    if len(items) == 1:
+        return (
+            f'<div class="cj-photos-collage single">'
+            f'{extra_badge}'
+            f'<div class="cj-photos-collage-main full">'
+            f'<img src="{items[0]["uri"]}" alt="" /></div>'
+            f'<div class="cj-photos-collage-count">{count_lbl}</div></div>'
+        )
+    if len(items) == 2:
+        return (
+            f'<div class="cj-photos-collage duo">'
+            f'{extra_badge}'
+            f'<div class="cj-photos-collage-main">'
+            f'<img src="{items[0]["uri"]}" alt="" /></div>'
+            f'<div class="cj-photos-collage-main">'
+            f'<img src="{items[1]["uri"]}" alt="" /></div>'
+            f'<div class="cj-photos-collage-count">{count_lbl}</div></div>'
+        )
+    hero = items[0]
+    tiles = []
+    rots = [-2.5, 1.5, -1, 2, -1.5, 1, 0.5]
+    for i, item in enumerate(items[1:7]):
+        rot = rots[i % len(rots)]
+        tiles.append(
+            f'<div class="cj-photos-collage-tile" style="--rot:{rot}deg">'
+            f'<img src="{item["uri"]}" alt="" /></div>'
+        )
+    return (
+        f'<div class="cj-photos-collage">'
+        f"{extra_badge}"
+        f'<div class="cj-photos-collage-main">'
+        f'<img src="{hero["uri"]}" alt="" /></div>'
+        f'<div class="cj-photos-collage-side">{"".join(tiles)}</div>'
+        f'<div class="cj-photos-collage-count">{count_lbl}</div>'
+        f"</div>"
+    )
+
+
+def render_photos_collage() -> None:
+    media = load_journey_media_df()
+    valid = media[
+        media["filename"].astype(str).apply(lambda f: media_file_path(f) is not None)
+    ]
+    items = _collage_items_from_media(valid)
+    st.markdown(photos_collage_html(items, len(valid)), unsafe_allow_html=True)
+
+
 def render_photos_view(
     df: pd.DataFrame,
     partners_df: pd.DataFrame,
     settings: dict,
     journey_day: int,
 ) -> None:
-    st.markdown("### 📸 Photos")
+    render_photos_collage()
     st.caption(
-        "Upload here and tag each photo — challenge, location, partner, or day. "
-        "Tagged photos become thumbnails across the app and in your slideshow."
+        "Upload & tag — challenge, location, partner, or day. "
+        "Photos appear in the collage above and across the app."
     )
     render_photo_upload_panel(
         "photos",
@@ -7711,41 +7937,7 @@ def path_node_card_html(
 """
 
 
-def render_path_hero(df: pd.DataFrame, stats: dict, journey_day: int):
-    days_done = stats.get("days_complete", 0)
-    pct = stats.get("pct", 0)
-    to_collar = max(0, TOTAL_DAYS - days_done)
-    ring = brand_ring_class(pct, stats.get("collar_earned", False))
-    brand = brand_portrait_html(148, ring)
-    today_meta = day_path_meta(journey_day)
-    today_status = day_goal_status(df, journey_day)
-    today_line = {
-        "exceeded": "You crushed today — overflow went to bonus! ⭐",
-        "met": "Today's goal is done — loot unlocked! ✅",
-        "pending": f"Mission: {today_meta['title']} — tap today's node to play.",
-    }.get(today_status, "")
-    today_venues = day_venue_strip_html(df, journey_day, max_icons=5, size=34)
-
-    st.markdown(
-        f"""
-<div class="dl-path-hero cj-brand-path-hero">
-  {brand}
-  <div style="flex:1;min-width:200px;">
-    <div class="dl-path-hero-title">Road to the Collar</div>
-    <div class="dl-path-hero-sub">
-      {days_done}/{TOTAL_DAYS} days cleared · {stats.get('grand_total', 0)} total XP ·
-      {to_collar} day{'s' if to_collar != 1 else ''} to go 🔗
-    </div>
-    {today_venues}
-    <div style="font-size:0.85rem;font-weight:600;color:#555;margin-top:0.35rem;">{today_line}</div>
-  </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-
-def render_collar_trail(df: pd.DataFrame, journey_day: int):
+def collar_trail_html(df: pd.DataFrame, journey_day: int) -> str:
     segs = []
     for day_num in range(1, TOTAL_DAYS + 1):
         status = day_goal_status(df, day_num)
@@ -7754,8 +7946,41 @@ def render_collar_trail(df: pd.DataFrame, journey_day: int):
             cls = "current"
         inner = "⭐" if status == "exceeded" else ("✓" if status in ("met", "exceeded") else str(day_num))
         segs.append(f'<div class="dl-collar-seg {cls}">{inner}</div>')
+    return f'<div class="dl-collar-trail">{"".join(segs)}<span class="dl-collar-end">🔗</span></div>'
+
+
+def render_path_hero(df: pd.DataFrame, stats: dict, journey_day: int):
+    """Unified Journey header — stats, completion trail, and portrait in one banner."""
+    days_done = int(stats.get("days_complete", 0))
+    pct = int(stats.get("pct", 0))
+    to_collar = max(0, TOTAL_DAYS - days_done)
+    total_xp = format_points(float(stats.get("grand_total", 0)))
+    ring = brand_ring_class(pct, stats.get("collar_earned", False))
+    brand = brand_portrait_html(92, ring)
+    today_meta = day_path_meta(journey_day)
+    today_status = day_goal_status(df, journey_day)
+    today_line = {
+        "exceeded": "Today crushed — overflow → bonus! ⭐",
+        "met": "Today's goal done — loot unlocked! ✅",
+        "pending": f"Today: {today_meta['title']} — tap today's node to play.",
+    }.get(today_status, "")
+    stats_line = (
+        f"Day {journey_day}/{TOTAL_DAYS} · {days_done} cleared · {pct}% journey · "
+        f"{total_xp} XP · {to_collar} to go"
+    )
+
     st.markdown(
-        f'<div class="dl-collar-trail">{"".join(segs)}<span class="dl-collar-end">🔗</span></div>',
+        f"""
+<div class="cj-journey-unified-hero cj-brand-path-hero">
+  <div class="cj-journey-unified-body">
+    <div class="dl-path-hero-title">Road to the Collar</div>
+    <div class="cj-journey-unified-stats">{stats_line}</div>
+    {collar_trail_html(df, journey_day)}
+    <div class="cj-journey-unified-today">{today_line}</div>
+  </div>
+  <div class="cj-journey-unified-photo">{brand}</div>
+</div>
+""",
         unsafe_allow_html=True,
     )
 
@@ -8204,8 +8429,16 @@ def render_nice_app_bar(
     )
 
 
+def _rich_cal_qicon_html(chip: dict) -> str:
+    done = chip.get("done", False)
+    cls = "done" if done else "pending"
+    icon = chip.get("icon", "📍")
+    title = str(chip.get("title", "")).replace('"', "&quot;")
+    return f'<span class="cj-rich-cal-qicon {cls}" title="{title}">{icon}</span>'
+
+
 def rich_cal_quest_track_html(summary: dict) -> str:
-    """Compact left-to-right quest progress with per-activity icons."""
+    """Compact quest progress — pending left, completed clustered upper-right."""
     chips = summary.get("activity_chips", [])
     act_total = summary.get("act_total", 0)
     act_done = summary.get("act_done", 0)
@@ -8213,19 +8446,37 @@ def rich_cal_quest_track_html(summary: dict) -> str:
         pct = min(int(summary.get("pct", 0)), 100)
         return f'<div class="cj-rich-cal-prog"><div style="width:{pct}%;"></div></div>'
     fill_pct = min(100, round(100 * act_done / act_total))
-    icons = []
-    for chip in chips:
-        done = chip.get("done", False)
-        cls = "done" if done else "pending"
-        icon = chip.get("icon", "📍")
-        title = str(chip.get("title", "")).replace('"', "&quot;")
-        icons.append(f'<span class="cj-rich-cal-qicon {cls}" title="{title}">{icon}</span>')
+    pending = [_rich_cal_qicon_html(c) for c in chips if not c.get("done")]
+    done = [_rich_cal_qicon_html(c) for c in chips if c.get("done")]
+    pending_html = "".join(pending) if pending else ""
+    done_html = "".join(done) if done else ""
+    icons_row = (
+        f'<div class="cj-rich-cal-track-icons split">'
+        f'<div class="cj-rich-cal-track-pending">{pending_html}</div>'
+        f'<div class="cj-rich-cal-track-done">{done_html}</div>'
+        f"</div>"
+    )
     return (
         f'<div class="cj-rich-cal-track">'
         f'<div class="cj-rich-cal-track-rail">'
         f'<div class="cj-rich-cal-track-fill" style="width:{fill_pct}%;"></div>'
         f"</div>"
-        f'<div class="cj-rich-cal-track-icons">{"".join(icons)}</div>'
+        f"{icons_row}"
+        f"</div>"
+    )
+
+
+def rich_cal_done_badge_html(act_done: int, act_total: int) -> str:
+    badge_cls = "cj-rich-cal-done-badge"
+    if act_total and act_done >= act_total:
+        badge_cls += " complete"
+    elif not act_done:
+        badge_cls += " zero"
+    mark = "✅ " if act_done else ""
+    return (
+        f'<div class="{badge_cls}">'
+        f'<div class="cj-rich-cal-done-main">{mark}{act_done}/{act_total}</div>'
+        f'<div class="cj-rich-cal-done-sub">done</div>'
         f"</div>"
     )
 
@@ -8294,10 +8545,15 @@ def rich_cal_day_card_html(
         hero_header = (
             f'<div class="cj-rich-cal-kicker">{today_mark}Day {day_num} — {day_title}</div>'
             f'<div class="cj-rich-cal-meta">{cal_date.strftime("%a, %b %d")}{venue_bit} · '
-            f'{format_points(goal_pts)}/{format_points(target)} XP · '
-            f'{act_done}/{act_total} · {status_txt}</div>'
+            f'{format_points(goal_pts)}/{format_points(target)} XP · {status_txt}</div>'
         )
         progress_html = rich_cal_quest_track_html(summary)
+    done_badge = ""
+    if hero and day_title and summary.get("act_total"):
+        done_badge = rich_cal_done_badge_html(
+            int(summary.get("act_done", 0)),
+            int(summary.get("act_total", 0)),
+        )
     inner_parts = []
     if hero_header:
         inner_parts.append(hero_header)
@@ -8310,6 +8566,7 @@ def rich_cal_day_card_html(
 <div class="{' '.join(css)}">
   {bg_html}
   <div class="cj-rich-cal-scrim"></div>
+  {done_badge}
   <div class="cj-rich-cal-inner">{inner_html}</div>
 </div>
 """
@@ -8725,17 +8982,6 @@ def render_day_extras(df: pd.DataFrame, bonus_df: pd.DataFrame, day_num: int, ke
                         st.warning("Could not add streak bonus (once per location per day).")
 
 
-def render_journey_mobile_summary(stats: dict, journey_day: int) -> None:
-    done = int(stats.get("days_complete", 0))
-    pct = int(stats.get("pct", 0))
-    st.markdown(
-        f'<div class="cj-journey-mobile-summary">'
-        f"📍 Day {journey_day}/{TOTAL_DAYS} · {done} days complete · {pct}% journey"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-
-
 def render_dashboard(
     df: pd.DataFrame,
     stats: dict,
@@ -8749,8 +8995,6 @@ def render_dashboard(
     partners_df = partners_df if partners_df is not None else load_partners_df()
     settings = settings if settings is not None else load_settings()
     render_path_hero(df, stats, journey_day)
-    render_collar_trail(df, journey_day)
-    render_journey_mobile_summary(stats, journey_day)
     render_journey_path(df, journey_day, bonus_df)
     render_achievements_wall(stats)
     render_path_loot_summary(stats, partner_summary)
@@ -8795,6 +9039,36 @@ def reset_quest_picker_after_complete(activity_key: str) -> None:
         st.session_state.pop(f"{prefix}_quest_dropdown_{day_num}", None)
 
 
+def _render_inline_quest_panel(
+    row,
+    df: pd.DataFrame,
+    day_num: int,
+    key_prefix: str,
+    partners_df: pd.DataFrame,
+    encounters_df: pd.DataFrame,
+    sub_pool: pd.DataFrame,
+) -> None:
+    """Expand quest inputs directly under the tapped tile row."""
+    is_earned = row["status"] == "earned"
+    mark_cls = "cj-quest-tile-expand-mark done" if is_earned else "cj-quest-tile-expand-mark"
+    lead = "✅" if is_earned else "🎯"
+    st.markdown(
+        f'<div class="{mark_cls}">{lead} {row["title"]}</div>',
+        unsafe_allow_html=True,
+    )
+    with st.container(border=True):
+        st.caption(str(row["description"]))
+        if is_earned:
+            _render_quest_done_panel(row, day_num, key_prefix, partners_df)
+        else:
+            maybe_render_quest_quick_complete(
+                row, day_num, key_prefix, partners_df, encounters_df
+            )
+            _render_quest_log_panel(
+                row, df, day_num, key_prefix, partners_df, encounters_df, sub_pool
+            )
+
+
 def render_day_quest_nav(
     day_df: pd.DataFrame,
     day_num: int,
@@ -8803,39 +9077,65 @@ def render_day_quest_nav(
     earned_pts: float,
     df: pd.DataFrame | None = None,
     partners_df: pd.DataFrame | None = None,
-) -> str | None:
-    """Tile grid for all day quests. Returns open activity_key for expand panel."""
+    encounters_df: pd.DataFrame | None = None,
+    sub_pool: pd.DataFrame | None = None,
+) -> None:
+    """Tile grid — expand panel opens inline under the tapped tile's row."""
     open_key = f"{key_prefix}_open_quest_{day_num}"
     quest_keys = day_df["activity_key"].astype(str).tolist()
     sync_open_quest_state(key_prefix, day_num, quest_keys)
 
     if not quest_keys:
-        return None
+        return
 
     st.markdown(
         '<div class="cj-quest-section-label">🎯 Tap a tile to complete or edit</div>',
         unsafe_allow_html=True,
     )
     ncols = 2 if len(quest_keys) > 1 else 1
-    cols = st.columns(ncols)
-    for i, key in enumerate(quest_keys):
-        row = day_df[day_df["activity_key"] == key].iloc[0]
-        is_open = st.session_state.get(open_key) == key
-        with cols[i % ncols]:
-            st.markdown(quest_day_tile_html(row, is_open), unsafe_allow_html=True)
-            if st.button(
-                quest_day_tile_button_label(row, is_open),
-                key=f"{key_prefix}_tile_{day_num}_{key}",
-                use_container_width=True,
-                type="primary" if is_open else "secondary",
-            ):
-                if is_open:
-                    st.session_state.pop(open_key, None)
-                else:
-                    st.session_state[open_key] = key
-                st.rerun()
+    open_quest = st.session_state.get(open_key)
 
-    return st.session_state.get(open_key)
+    for row_start in range(0, len(quest_keys), ncols):
+        row_keys = quest_keys[row_start : row_start + ncols]
+        cols = st.columns(ncols)
+        for j, key in enumerate(row_keys):
+            row = day_df[day_df["activity_key"] == key].iloc[0]
+            is_open = open_quest == key
+            with cols[j]:
+                st.markdown(quest_day_tile_html(row, is_open), unsafe_allow_html=True)
+                if st.button(
+                    quest_day_tile_button_label(row, is_open),
+                    key=f"{key_prefix}_tile_{day_num}_{key}",
+                    use_container_width=True,
+                    type="primary" if is_open else "secondary",
+                ):
+                    if is_open:
+                        st.session_state.pop(open_key, None)
+                    else:
+                        st.session_state[open_key] = key
+                    st.rerun()
+
+        if (
+            open_quest
+            and open_quest in row_keys
+            and df is not None
+            and partners_df is not None
+            and encounters_df is not None
+            and sub_pool is not None
+        ):
+            open_rows = day_df[day_df["activity_key"] == open_quest]
+            if not open_rows.empty:
+                _render_inline_quest_panel(
+                    open_rows.iloc[0],
+                    df,
+                    day_num,
+                    key_prefix,
+                    partners_df,
+                    encounters_df,
+                    sub_pool,
+                )
+            else:
+                st.warning("That quest is no longer available — pick another tile.")
 
 
 def _render_quest_log_panel(
@@ -9220,36 +9520,22 @@ def render_day_detail(
             unsafe_allow_html=True,
         )
 
-    open_quest = render_day_quest_nav(
-        day_df, day_num, key_prefix, target, earned_pts, df, partners_df
-    )
-
     used_as_sub_keys = valid_substitution_keys(df)
     sub_pool = df[
         df["activity_key"].isin(used_as_sub_keys) & (df["status"] == "pending")
     ]
 
-    if open_quest:
-        open_rows = day_df[day_df["activity_key"] == open_quest]
-        if open_rows.empty:
-            st.warning("That quest is no longer available — pick another tile above.")
-        else:
-            row = open_rows.iloc[0]
-            is_earned = row["status"] == "earned"
-            with st.container(border=True):
-                if is_earned:
-                    st.markdown(f"**✅ {row['title']}**")
-                    st.caption(str(row["description"]))
-                    _render_quest_done_panel(row, day_num, key_prefix, partners_df)
-                else:
-                    st.markdown(f"**🎯 {row['title']}**")
-                    st.caption(str(row["description"]))
-                    maybe_render_quest_quick_complete(
-                        row, day_num, key_prefix, partners_df, encounters_df
-                    )
-                    _render_quest_log_panel(
-                        row, df, day_num, key_prefix, partners_df, encounters_df, sub_pool
-                    )
+    render_day_quest_nav(
+        day_df,
+        day_num,
+        key_prefix,
+        target,
+        earned_pts,
+        df,
+        partners_df,
+        encounters_df,
+        sub_pool,
+    )
 
     if not sub_pool.empty:
         st.markdown("#### Still open after substitutions")
@@ -9400,13 +9686,14 @@ def main():
         key="main_tab_radio",
     )
 
-    render_header(
-        settings,
-        stats,
-        journey_day,
-        partner_summary,
-        nice=(selected_tab not in (TAB_JOURNEY, TAB_PHOTOS)),
-    )
+    if selected_tab not in (TAB_JOURNEY, TAB_PHOTOS):
+        render_header(
+            settings,
+            stats,
+            journey_day,
+            partner_summary,
+            nice=True,
+        )
 
     if selected_tab == TAB_TODAY:
         render_calendar_view(df, encounters_df, settings, journey_day, bonus_df, partners_df)
