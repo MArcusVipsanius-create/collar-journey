@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+.streamlit/secrets.toml
+*.log
+.DS_Store
+Thumbs.db
+
+# Large / unrelated local artifacts — not needed for Collar Journey deploy
+dist/
+_recovered/
+_recovered_*
+_recover_*
+build_portable.ps1
+build_portable.bat
