@@ -868,8 +868,29 @@ def qakc_face_hero_html(featured: bool = False) -> str:
 
 
 def venue_hero_html(location: str, row=None, *, featured: bool = False) -> str:
+    if row is not None:
+        act_key = str(row.get("activity_key") or "")
+        if act_key:
+            user_uri = challenge_media_uri(act_key)
+            if user_uri:
+                meta = activity_meta(row)
+                color = meta.get("color", "#1CB0F6")
+                hero_cls = "cj-quest-hero featured" if featured else "cj-quest-hero"
+                return (
+                    f'<div class="{hero_cls}" style="border-color:{color}99;">'
+                    f'<img src="{user_uri}" alt="" /></div>'
+                )
     if str(location) == "qakc":
         return qakc_face_hero_html(featured=featured)
+    loc_uri = location_media_uri(str(location))
+    if loc_uri:
+        meta = LOCATIONS.get(location, {})
+        color = meta.get("color", "#1CB0F6")
+        hero_cls = "cj-quest-hero featured" if featured else "cj-quest-hero"
+        return (
+            f'<div class="{hero_cls}" style="border-color:{color}99;">'
+            f'<img src="{loc_uri}" alt="" /></div>'
+        )
     meta = activity_meta(row) if row is not None else LOCATIONS.get(location, {})
     if row is None and location:
         meta = LOCATIONS.get(location, meta)
@@ -5626,21 +5647,19 @@ def render_photo_upload_panel(
     default_day_num: int | None = None,
     label: str = "📸 Add a photo",
     compact: bool = False,
+    standalone: bool = False,
 ) -> None:
     """Upload with photo type — location, challenge, partner, or day — for app thumbnails."""
     panel_key = f"{key_prefix}_photo_{default_day_num}_{default_activity_key}_{default_partner_id}"
-    kind_key = f"{panel_key}_kind"
     kind_list = list(PHOTO_KIND_LABELS.keys())
-    if kind_key not in st.session_state:
-        st.session_state[kind_key] = default_kind if default_kind in kind_list else MEDIA_KIND_CHALLENGE
 
-    with st.expander(label, expanded=not compact):
+    def _upload_body() -> None:
         photo_kind = st.selectbox(
             "Photo type",
             kind_list,
-            index=_photo_kind_index(st.session_state[kind_key]),
+            index=_photo_kind_index(default_kind),
             format_func=lambda k: PHOTO_KIND_LABELS[k],
-            key=kind_key,
+            key=f"{panel_key}_kind",
         )
         activity_key = ""
         partner_id: int | None = None
@@ -5648,7 +5667,13 @@ def render_photo_upload_panel(
         day_num = default_day_num
 
         if photo_kind == MEDIA_KIND_CHALLENGE:
-            day_num = int(default_day_num or 1)
+            day_num = st.selectbox(
+                "Day",
+                list(range(1, TOTAL_DAYS + 1)),
+                index=int(default_day_num or 1) - 1,
+                format_func=lambda d: f"Day {d} — {day_plan_meta(d)['title']}",
+                key=f"{panel_key}_challenge_day",
+            )
             day_acts = df[df["day_num"] == day_num].sort_values(["time_slot", "slot_order"])
             if day_acts.empty:
                 st.caption("No quests on this day.")
@@ -5755,6 +5780,90 @@ def render_photo_upload_panel(
                 st.warning("Some photos were skipped: " + "; ".join(errors[:3]))
             if saved:
                 st.rerun()
+
+    if standalone:
+        st.markdown(f"#### {label}")
+        _upload_body()
+    else:
+        with st.expander(label, expanded=not compact):
+            _upload_body()
+
+
+def render_tagged_media_library(
+    df: pd.DataFrame,
+    partners_df: pd.DataFrame,
+    settings: dict,
+) -> None:
+    media = load_journey_media_df()
+    st.markdown("#### Tagged library")
+    if media.empty:
+        st.info("No photos yet — upload and tag above.")
+        return
+    filter_opts = ["All"] + list(PHOTO_KIND_LABELS.values())
+    kind_by_label = {v: k for k, v in PHOTO_KIND_LABELS.items()}
+    filter_pick = st.selectbox(
+        "Show",
+        filter_opts,
+        key="photos_library_filter",
+        label_visibility="collapsed",
+    )
+    if filter_pick != "All":
+        kind_filter = kind_by_label.get(filter_pick)
+        if kind_filter == MEDIA_KIND_CHALLENGE:
+            media = media[media["kind"].isin(CHALLENGE_MEDIA_KINDS)]
+        else:
+            media = media[media["kind"] == kind_filter]
+    if media.empty:
+        st.caption("No photos for this filter.")
+        return
+    cols = st.columns(2)
+    for i, (_, row) in enumerate(media.iterrows()):
+        path = media_file_path(str(row["filename"]))
+        if not path:
+            continue
+        kind = str(row.get("kind") or "")
+        kind_label = PHOTO_KIND_LABELS.get(
+            MEDIA_KIND_CHALLENGE if kind in CHALLENGE_MEDIA_KINDS else kind,
+            kind,
+        )
+        tag = media_slide_label(row, df, partners_df, settings)
+        with cols[i % 2]:
+            st.image(str(path), use_container_width=True)
+            st.markdown(f"**{kind_label}**")
+            st.caption(tag if len(tag) <= 72 else tag[:70] + "…")
+            if st.button(
+                "🗑 Remove",
+                key=f"photos_lib_del_{row['media_id']}",
+                use_container_width=True,
+            ):
+                delete_journey_media(str(row["media_id"]))
+                st.toast("Photo removed")
+                st.rerun()
+
+
+def render_photos_view(
+    df: pd.DataFrame,
+    partners_df: pd.DataFrame,
+    settings: dict,
+    journey_day: int,
+) -> None:
+    st.markdown("### 📸 Photos")
+    st.caption(
+        "Upload here and tag each photo — challenge, location, partner, or day. "
+        "Tagged photos become thumbnails across the app and in your slideshow."
+    )
+    render_photo_upload_panel(
+        "photos",
+        df=df,
+        partners_df=partners_df,
+        default_day_num=journey_day,
+        label="Upload & tag",
+        standalone=True,
+    )
+    st.divider()
+    render_tagged_media_library(df, partners_df, settings)
+    st.divider()
+    render_journey_slideshow(df, partners_df, settings)
 
 
 def render_media_upload_section(
@@ -6760,8 +6869,13 @@ def render_encounter_summary(activity_key: str):
             pid = erow["partner_id"]
             if len(partner_enc[partner_enc["partner_id"] == pid]) > 1:
                 repeat = " 🔁"
+        avatar = partner_avatar_html(int(erow["partner_id"]), str(erow["display_name"]), 32)
         st.markdown(
-            f"- **{erow['display_name']}** · {acts_txt} · *{erow['initiated_by']} initiated*{repeat}"
+            f"<div style='display:flex;align-items:center;margin:0.35rem 0;'>"
+            f"{avatar}<span><strong>{html.escape(str(erow['display_name']))}</strong> · "
+            f"{html.escape(acts_txt)} · <em>{html.escape(str(erow['initiated_by']))} initiated</em>"
+            f"{repeat}</span></div>",
+            unsafe_allow_html=True,
         )
 
 
@@ -6899,18 +7013,6 @@ def render_partners_tab(encounters: pd.DataFrame, partners: pd.DataFrame):
         day_num=day_opts[day_label],
     )
     st.caption(f"Showing **{len(filtered)}** of **{len(encounters)}** encounters")
-
-    selected_partner_id = partner_opts[partner_label]
-    if selected_partner_id is not None:
-        prow = partner_row(partners, selected_partner_id)
-        if prow is not None:
-            render_media_upload_section(
-                "ptn",
-                kind="partner",
-                partner_id=int(selected_partner_id),
-                label=f"📸 Photos · {prow['display_name']}",
-                compact=True,
-            )
 
     tab_overview, tab_partner, tab_location, tab_activity, tab_log = st.tabs(
         ["📊 Overview", "👤 By partner", "📍 By location", "🎯 By activity", "📜 Full log"]
@@ -7625,7 +7727,8 @@ TAB_TODAY = "⚡ Today"
 TAB_STATS = "📊 Stats"
 TAB_JOURNEY = "🗺️ Journey"
 TAB_MORE = "⋯ More"
-MAIN_TABS = [TAB_TODAY, TAB_STATS, TAB_JOURNEY, TAB_MORE]
+TAB_PHOTOS = "📸 Photos"
+MAIN_TABS = [TAB_TODAY, TAB_STATS, TAB_JOURNEY, TAB_MORE, TAB_PHOTOS]
 
 _LEGACY_TAB_ALIASES = {
     "📅 Calendar": TAB_TODAY,
@@ -7635,6 +7738,7 @@ _LEGACY_TAB_ALIASES = {
     "👥 Partners": TAB_MORE,
     "🔄 Swap": TAB_MORE,
     "⚙️ Settings": TAB_MORE,
+    "📸 Memories": TAB_PHOTOS,
 }
 
 
@@ -8312,41 +8416,12 @@ def render_calendar_view(
             _set_calendar_day(other, journey_day)
             st.rerun()
 
-    day_photos = filter_journey_media(kind="day", day_num=pick)
-    if not day_photos.empty:
-        st.markdown("**Day photos**")
-        render_media_thumbnail_grid(day_photos, f"cal_day_gallery_{pick}")
-    render_media_upload_section(
-        "calendar",
-        kind="day",
-        day_num=pick,
-        label="📸 Add day photos",
-        compact=True,
-    )
-    day_locs = sorted(df[df["day_num"] == pick]["location"].unique().tolist())
-    if day_locs:
-        loc_labels = [location_person_label(loc) for loc in day_locs]
-        loc_idx = 0
-        if len(day_locs) > 1:
-            loc_idx = st.selectbox(
-                "Location for photo",
-                range(len(day_locs)),
-                format_func=lambda i: loc_labels[i],
-                key=f"cal_loc_photo_pick_{pick}",
-            )
-        render_media_upload_section(
-            "calendar",
-            kind="location",
-            location=str(day_locs[loc_idx]),
-            day_num=pick,
-            label=f"📍 {loc_labels[loc_idx]} photo",
-            compact=True,
-        )
+    if partners_df is None:
+        partners_df = load_partners_df()
 
     st.divider()
     st.markdown("##### Complete quests")
-    if partners_df is None:
-        partners_df = load_partners_df()
+    st.caption("📸 Quest, location & partner photos — upload and tag on the **Photos** tab.")
     render_day_detail(
         df,
         pick,
@@ -8482,7 +8557,6 @@ def render_dashboard(
     render_journey_path(df, journey_day, bonus_df)
     render_achievements_wall(stats)
     render_path_loot_summary(stats, partner_summary)
-    render_journey_slideshow(df, partners_df, settings)
 
 
 def quest_pick_label(day_df: pd.DataFrame, activity_key: str) -> str:
@@ -8691,15 +8765,6 @@ def _render_quest_log_panel(
     )
 
     if mode == "Complete as planned":
-        render_media_upload_section(
-            key_prefix,
-            kind="quest",
-            activity_key=str(row["activity_key"]),
-            location=str(row["location"]),
-            day_num=day_num,
-            label="📸 Quest photos",
-            compact=True,
-        )
         if is_solo_half_point(row):
             notes = st.text_area(
                 "Notes (optional)",
@@ -8895,15 +8960,6 @@ def _render_quest_done_panel(
     key_prefix: str,
     partners_df: pd.DataFrame,
 ) -> None:
-    render_media_upload_section(
-        key_prefix,
-        kind="quest",
-        activity_key=str(row["activity_key"]),
-        location=str(row["location"]),
-        day_num=day_num,
-        label="📸 Quest photos",
-        compact=True,
-    )
     render_encounter_summary(row["activity_key"])
     enc = load_encounters_for_activity(row["activity_key"])
     if not enc.empty:
@@ -9114,15 +9170,13 @@ def render_more_view(
 ) -> None:
     choice = st.radio(
         "MoreMenu",
-        ["👥 Partners", "📸 Memories", "🔄 Swap", "⚙️ Settings"],
+        ["👥 Partners", "🔄 Swap", "⚙️ Settings"],
         horizontal=True,
         label_visibility="collapsed",
         key="more_tab_radio",
     )
     if choice == "👥 Partners":
         render_partners_tab(encounters_df, partners_df)
-    elif choice == "📸 Memories":
-        render_journey_slideshow(df, partners_df, settings)
     elif choice == "🔄 Swap":
         render_substitution_pool(df)
     else:
@@ -9253,7 +9307,7 @@ def main():
         stats,
         journey_day,
         partner_summary,
-        nice=(selected_tab != TAB_JOURNEY),
+        nice=(selected_tab not in (TAB_JOURNEY, TAB_PHOTOS)),
     )
 
     if selected_tab == TAB_TODAY:
@@ -9269,6 +9323,9 @@ def main():
 
     elif selected_tab == TAB_MORE:
         render_more_view(df, encounters_df, partners_df, settings)
+
+    elif selected_tab == TAB_PHOTOS:
+        render_photos_view(df, partners_df, settings, journey_day)
 
 
 if __name__ == "__main__":
