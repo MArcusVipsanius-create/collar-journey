@@ -238,6 +238,7 @@ BRAND_JOURNEY_START = "journey_start.jpg"
 BRAND_JOURNEY_END = "journey_end.jpg"
 APPLE_TOUCH_ICON = "apple-touch-icon.png"
 STATIC_APPLE_TOUCH_ICON = "app/static/apple-touch-icon.png"
+STATIC_WEB_MANIFEST = "app/static/manifest.webmanifest"
 
 # Which venue image to feature on path/calendar when a day has several.
 SIGNATURE_VENUE_PRIORITY = [
@@ -330,13 +331,17 @@ def inject_ios_homescreen_meta() -> None:
     """Inject home-screen meta + icon into the main page (not the component iframe)."""
     title = json.dumps(APP_NAME)
     static_path = json.dumps(STATIC_APPLE_TOUCH_ICON)
+    manifest_path = json.dumps(STATIC_WEB_MANIFEST)
     components.html(
         f"""
+<div id="cj-offline-banner" class="cj-offline-banner">No connection — changes may not save</div>
 <script>
 (function() {{
   const doc = window.parent.document;
   const head = doc.head;
-  const icon = window.parent.location.origin + {static_path};
+  const base = window.parent.location.origin;
+  const icon = base + {static_path};
+  const manifest = base + {manifest_path};
   [
     ["name", "apple-mobile-web-app-capable", "yes"],
     ["name", "apple-mobile-web-app-title", {title}],
@@ -350,6 +355,12 @@ def inject_ios_homescreen_meta() -> None:
     m.content = val;
     head.appendChild(m);
   }});
+  if (!head.querySelector('link[rel="manifest"]')) {{
+    const man = doc.createElement("link");
+    man.rel = "manifest";
+    man.href = manifest;
+    head.appendChild(man);
+  }}
   if (!head.querySelector('link[rel="apple-touch-icon"]')) {{
     const link = doc.createElement("link");
     link.rel = "apple-touch-icon";
@@ -363,6 +374,18 @@ def inject_ios_homescreen_meta() -> None:
     fav.href = icon;
     head.appendChild(fav);
   }}
+  let banner = doc.getElementById("cj-offline-banner");
+  if (!banner) {{
+    banner = document.getElementById("cj-offline-banner");
+    if (banner) doc.body.prepend(banner);
+  }}
+  const syncOffline = () => {{
+    if (!banner) return;
+    banner.classList.toggle("show", !navigator.onLine);
+  }};
+  window.parent.addEventListener("online", syncOffline);
+  window.parent.addEventListener("offline", syncOffline);
+  syncOffline();
 }})();
 </script>
 """,
@@ -3256,6 +3279,23 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
 .cj-rich-cal-prog > div {
     height: 100%; border-radius: 999px; background: var(--dl-yellow);
 }
+.cj-rich-cal-day.hero {
+    min-height: 200px;
+    margin: 0.35rem 0 0.65rem;
+    border-radius: 18px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+.cj-rich-cal-day.hero .cj-rich-cal-num { font-size: 2.2rem; }
+.cj-rich-cal-day.hero .cj-rich-cal-daylabel { font-size: 0.72rem; }
+.cj-rich-cal-day.hero .cj-rich-cal-icons { font-size: 0.85rem; min-height: 1.25rem; }
+.cj-rich-cal-day.hero .cj-rich-cal-prog { height: 6px; margin-top: 0.4rem; }
+.cj-cal-day-status {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--dl-muted);
+    margin: 0 0 0.65rem;
+}
+.cj-journey-mobile-summary { display: none; }
 
 .nice-app-bar {
     display: flex; justify-content: space-between; align-items: baseline;
@@ -3416,6 +3456,8 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
     .cj-rich-bar-sub { font-size: 0.72rem; }
     .cj-rich-chip { font-size: 0.68rem; padding: 0.22rem 0.45rem; }
     .cj-rich-cal-day { min-height: 108px; border-radius: 12px; }
+    .cj-rich-cal-day.hero { min-height: 180px; }
+    .cj-rich-cal-day.hero .cj-rich-cal-num { font-size: 2rem; }
     .cj-rich-cal-num { font-size: 1.2rem; }
     .cj-rich-cal-icons { font-size: 0.65rem; }
     .cj-cal-week-label { font-size: 0.88rem; margin: 0.75rem 0 0.35rem; }
@@ -3456,6 +3498,100 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
     input, textarea, select {
         font-size: 16px !important;
     }
+    /* Bottom nav */
+    .block-container {
+        padding-bottom: calc(5.75rem + env(safe-area-inset-bottom)) !important;
+    }
+    section.main div[data-testid="stRadio"]:has([aria-label="AppNavigate"]) {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 999;
+        background: rgba(255,255,255,0.97);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border-top: 1px solid #e5e5ea;
+        padding: 0.3rem 0.35rem calc(0.35rem + env(safe-area-inset-bottom));
+        margin: 0 !important;
+        box-shadow: 0 -4px 24px rgba(0,0,0,0.08);
+    }
+    section.main div[data-testid="stRadio"]:has([aria-label="AppNavigate"]) > div[role="radiogroup"] {
+        justify-content: space-around;
+        overflow-x: visible;
+        gap: 0.15rem;
+        padding-bottom: 0;
+    }
+    section.main div[data-testid="stRadio"]:has([aria-label="AppNavigate"]) label {
+        flex: 1;
+        min-width: 0;
+        justify-content: center;
+        padding: 0.35rem 0.2rem !important;
+    }
+    section.main div[data-testid="stRadio"]:has([aria-label="AppNavigate"]) label p {
+        font-size: 0.72rem !important;
+    }
+    /* Sticky complete buttons above bottom nav */
+    section.main div[data-testid="stButton"]:has(button[kind="primary"]) {
+        position: sticky;
+        bottom: calc(4.75rem + env(safe-area-inset-bottom));
+        z-index: 900;
+        padding-top: 0.35rem;
+        background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.92) 35%);
+    }
+    section.main div[data-testid="stButton"]:has(button[kind="primary"]) button {
+        box-shadow: 0 4px 18px rgba(88,204,2,0.35);
+    }
+    /* Journey path — compact on phone */
+    .cj-journey-mobile-summary { display: block; }
+    .dl-adventure-map { display: none !important; }
+    .dl-path-node-card { margin-bottom: 0.45rem; }
+    .cj-journey-mobile-summary {
+        background: white;
+        border: 2px solid var(--dl-border);
+        border-radius: 14px;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        font-size: 0.88rem;
+        font-weight: 700;
+    }
+    /* Hide wide tables on phone — cards remain */
+    div[data-testid="stDataFrame"],
+    div[data-testid="stArrowDataFrame"] {
+        display: none !important;
+    }
+    .cj-offline-banner {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        background: #ff4b4b;
+        color: white;
+        text-align: center;
+        font-weight: 800;
+        font-size: 0.82rem;
+        padding: 0.45rem 0.75rem;
+        padding-top: calc(0.45rem + env(safe-area-inset-top));
+    }
+    .cj-offline-banner.show { display: block; }
+}
+@media (max-width: 768px) and (prefers-color-scheme: dark) {
+    .stApp {
+        background: linear-gradient(180deg, #0f1520 0%, #1a1020 45%, #121018 100%);
+        color: #ece4f0;
+    }
+    section.main div[data-testid="stRadio"]:has([aria-label="AppNavigate"]) {
+        background: rgba(26,16,32,0.97);
+        border-top-color: #3d2548;
+    }
+    .nice-entry-row, .nice-stat-card, .dl-pill {
+        background: #1f1528;
+        border-color: #3d2548;
+        color: #ece4f0;
+    }
+    .nice-entry-title { color: #f5eef8; }
 }
 @media (max-width: 390px) {
     .cj-rich-cal-day { min-height: 96px; }
@@ -4239,6 +4375,12 @@ def emit_celebration_diff(
             "THE COLLAR IS HERS!",
             "Every quest complete — incroyable!",
         )
+
+    if activity_key:
+        try:
+            st.toast("Quest saved — updated ✓", icon="✅")
+        except Exception:
+            pass
 
 
 def complete_quest(activity_key: str, notes: str = "", earned_points: int | None = None):
@@ -6515,10 +6657,7 @@ def render_journey_path(df: pd.DataFrame, journey_day: int, bonus_df: pd.DataFra
                 use_container_width=True,
                 type="primary" if day_num == journey_day and status == "pending" else "secondary",
             ):
-                if day_num == journey_day:
-                    request_main_tab("✚ Log")
-                else:
-                    request_main_tab("📅 Calendar", day_num)
+                request_main_tab(TAB_TODAY, day_num)
 
         prev_status = status
 
@@ -6562,13 +6701,26 @@ def render_path_loot_summary(stats: dict, partner_summary: dict):
     st.markdown(f'<div class="dl-loot-bar">{chips}</div>', unsafe_allow_html=True)
 
 
+TAB_TODAY = "⚡ Today"
+TAB_STATS = "📊 Stats"
+TAB_JOURNEY = "🗺️ Journey"
+TAB_MORE = "⋯ More"
+MAIN_TABS = [TAB_TODAY, TAB_STATS, TAB_JOURNEY, TAB_MORE]
+
+_LEGACY_TAB_ALIASES = {
+    "📅 Calendar": TAB_TODAY,
+    "✚ Log": TAB_TODAY,
+    "🗺️ Path": TAB_JOURNEY,
+    "📋 Quests": TAB_TODAY,
+    "👥 Partners": TAB_MORE,
+    "🔄 Swap": TAB_MORE,
+    "⚙️ Settings": TAB_MORE,
+}
+
+
 def apply_pending_navigation(tab_labels: list[str]):
     """Apply tab/day jumps before navigation widgets are drawn."""
-    tab_aliases = {
-        "⚡ Today": "✚ Log",
-        "🗺️ Path": "🗺️ Journey",
-        "📋 Quests": "✚ Log",
-    }
+    tab_aliases = dict(_LEGACY_TAB_ALIASES)
     pending_tab = st.session_state.pop("_pending_main_tab", None)
     if pending_tab in tab_aliases:
         pending_tab = tab_aliases[pending_tab]
@@ -6892,9 +7044,12 @@ def rich_cal_day_card_html(
     day_num: int,
     journey_day: int,
     view_day: int,
+    hero: bool = False,
 ) -> str:
     gs = summary.get("goal_status", "pending")
     css = ["cj-rich-cal-day"]
+    if hero:
+        css.append("hero")
     if gs == "exceeded":
         css.append("exceeded")
     elif gs == "met":
@@ -6977,42 +7132,6 @@ def render_nice_day_entries(df: pd.DataFrame, day_num: int, encounters: pd.DataF
             f"</div>"
         )
     st.markdown(f"<div class='nice-entry-list'>{''.join(rows)}</div>", unsafe_allow_html=True)
-
-
-def render_nice_calendar_week(
-    week_days: range,
-    summaries: list[dict],
-    settings: dict,
-    journey_day: int,
-    view_day: int,
-) -> None:
-    """Photo-rich clickable week — 2-column grid (readable on iPhone)."""
-    days = list(week_days)
-    for i in range(0, len(days), 2):
-        cols = st.columns(2, gap="small")
-        for j, col in enumerate(cols):
-            if i + j >= len(days):
-                break
-            day_num = days[i + j]
-            summary = summaries[day_num - 1]
-            cal_date = journey_date(settings, day_num)
-            with col:
-                st.markdown(
-                    f"<div class='nice-cal-dow'>{cal_date.strftime('%a %b %d')}</div>",
-                    unsafe_allow_html=True,
-                )
-                st.markdown(
-                    rich_cal_day_card_html(summary, cal_date, day_num, journey_day, view_day),
-                    unsafe_allow_html=True,
-                )
-                if st.button(
-                    "▶ Open" if day_num == view_day else "Open",
-                    key=f"nice_cal_{day_num}",
-                    use_container_width=True,
-                    type="primary" if day_num == view_day else "secondary",
-                ):
-                    st.session_state.cal_day_pick = day_num
-                    st.rerun()
 
 
 def render_stats_view(
@@ -7202,10 +7321,6 @@ def render_calendar_view(
     view_day = _ensure_calendar_pick(journey_day)
     start = journey_date(settings, 1)
     end = journey_date(settings, TOTAL_DAYS)
-    st.caption(
-        f"**{start.strftime('%B %d')} – {end.strftime('%B %d, %Y')}** · "
-        "Tap a day to log or review — icons show completed activities."
-    )
 
     used_cal_images: set[str] = set()
     summaries = [
@@ -7213,27 +7328,47 @@ def render_calendar_view(
         for d in range(1, TOTAL_DAYS + 1)
     ]
 
-    for week_idx, week_days in enumerate([range(1, 8), range(8, 15)], start=1):
-        w_start = journey_date(settings, week_days.start)
-        w_end = journey_date(settings, week_days.stop - 1)
-        st.markdown(
-            f"<div class='cj-cal-week-label'>Week {week_idx} · "
-            f"{w_start.strftime('%b %d')} – {w_end.strftime('%b %d')}</div>",
-            unsafe_allow_html=True,
+    day_col, today_col = st.columns([5, 1])
+    with day_col:
+        pick = st.selectbox(
+            "Choose day",
+            list(range(1, TOTAL_DAYS + 1)),
+            index=view_day - 1,
+            format_func=lambda d: _calendar_day_label(settings, d),
+            key="cal_day_select",
         )
-        render_nice_calendar_week(
-            week_days, summaries, settings, journey_day, view_day
-        )
+    with today_col:
+        st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
+        if st.button(
+            "Today",
+            key="cal_jump_today",
+            use_container_width=True,
+            disabled=(pick == journey_day),
+            type="primary" if pick == journey_day else "secondary",
+        ):
+            st.session_state.cal_day_pick = journey_day
+            st.rerun()
+    st.session_state.cal_day_pick = pick
 
-    pick = int(st.session_state.cal_day_pick)
     summary = summaries[pick - 1]
     cal_date = journey_date(settings, pick)
+
+    st.caption(f"{start.strftime('%B %d')} – {end.strftime('%B %d, %Y')}")
+    st.markdown(
+        rich_cal_day_card_html(summary, cal_date, pick, journey_day, pick, hero=True),
+        unsafe_allow_html=True,
+    )
 
     status_txt = {
         "exceeded": "⭐ Goal exceeded",
         "met": "✅ Goal achieved",
     }.get(summary.get("goal_status", "pending"), f"{summary['pct']}% in progress")
-    st.markdown(f"**Day {pick} — {summary['title']}** · {cal_date.strftime('%A, %B %d')} · {status_txt}")
+    st.markdown(
+        f"<div class='cj-cal-day-status'>{status_txt} · "
+        f"{summary['act_done']}/{summary['act_total']} quests · "
+        f"{cal_date.strftime('%A, %B %d')}</div>",
+        unsafe_allow_html=True,
+    )
 
     st.markdown(day_venue_banner_html(df, pick), unsafe_allow_html=True)
     st.markdown(
@@ -7241,10 +7376,8 @@ def render_calendar_view(
         unsafe_allow_html=True,
     )
 
-    render_nice_day_entries(df, pick, encounters)
-
     st.divider()
-    st.markdown("##### Log & complete")
+    st.markdown("##### Complete quests")
     if partners_df is None:
         partners_df = load_partners_df()
     render_day_detail(
@@ -7353,6 +7486,17 @@ def render_day_extras(df: pd.DataFrame, bonus_df: pd.DataFrame, day_num: int, ke
                         st.warning("Could not add streak bonus (once per location per day).")
 
 
+def render_journey_mobile_summary(stats: dict, journey_day: int) -> None:
+    done = int(stats.get("days_complete", 0))
+    pct = int(stats.get("pct", 0))
+    st.markdown(
+        f'<div class="cj-journey-mobile-summary">'
+        f"📍 Day {journey_day}/{TOTAL_DAYS} · {done} days complete · {pct}% journey"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def render_dashboard(
     df: pd.DataFrame,
     stats: dict,
@@ -7363,6 +7507,7 @@ def render_dashboard(
     bonus_df = bonus_df if bonus_df is not None else load_bonus_df()
     render_path_hero(df, stats, journey_day)
     render_collar_trail(df, journey_day)
+    render_journey_mobile_summary(stats, journey_day)
     render_journey_path(df, journey_day, bonus_df)
     render_achievements_wall(stats)
     render_path_loot_summary(stats, partner_summary)
@@ -7430,28 +7575,52 @@ def render_day_quest_nav(
     if pending_keys:
         if pick_key not in st.session_state or st.session_state[pick_key] not in pending_keys:
             st.session_state[pick_key] = pending_keys[0]
-        st.markdown('<div class="cj-quest-section-label">🎯 To complete — tap a quest</div>', unsafe_allow_html=True)
-        ncols = min(len(pending_keys), 2)
-        cols = st.columns(ncols)
-        for i, key in enumerate(pending_keys):
-            row = pending_df[pending_df["activity_key"] == key].iloc[0]
-            short = str(row["title"])
-            if len(short) > 32:
-                short = short[:30] + "…"
-            is_sel = st.session_state[pick_key] == key
-            with cols[i % ncols]:
-                st.markdown(quest_pick_tile_html(row, is_sel), unsafe_allow_html=True)
-                btn_label = f"{'▶ ' if is_sel else ''}{short}"
-                if st.button(
-                    btn_label,
-                    key=f"{key_prefix}_jump_{day_num}_{key}",
-                    use_container_width=True,
-                    type="primary" if is_sel else "secondary",
-                ):
-                    st.session_state[pick_key] = key
-                    st.session_state.pop(f"{key_prefix}_viewing_done_{day_num}", None)
-                    st.rerun()
-        active_pending = str(st.session_state[pick_key])
+        if len(pending_keys) >= 6:
+            st.markdown(
+                '<div class="cj-quest-section-label">🎯 To complete — pick a quest</div>',
+                unsafe_allow_html=True,
+            )
+            chosen = st.selectbox(
+                "Quest",
+                pending_keys,
+                index=pending_keys.index(st.session_state[pick_key]),
+                format_func=lambda k: quest_pick_label(day_df, k),
+                key=f"{key_prefix}_quest_dropdown_{day_num}",
+                label_visibility="collapsed",
+            )
+            if chosen != st.session_state[pick_key]:
+                st.session_state[pick_key] = chosen
+                st.session_state.pop(f"{key_prefix}_viewing_done_{day_num}", None)
+                st.rerun()
+            row = pending_df[pending_df["activity_key"] == chosen].iloc[0]
+            st.markdown(quest_pick_tile_html(row, True), unsafe_allow_html=True)
+            active_pending = str(chosen)
+        else:
+            st.markdown(
+                '<div class="cj-quest-section-label">🎯 To complete — tap a quest</div>',
+                unsafe_allow_html=True,
+            )
+            ncols = min(len(pending_keys), 2)
+            cols = st.columns(ncols)
+            for i, key in enumerate(pending_keys):
+                row = pending_df[pending_df["activity_key"] == key].iloc[0]
+                short = str(row["title"])
+                if len(short) > 28:
+                    short = short[:26] + "…"
+                is_sel = st.session_state[pick_key] == key
+                with cols[i % ncols]:
+                    st.markdown(quest_pick_tile_html(row, is_sel), unsafe_allow_html=True)
+                    btn_label = f"{'▶ ' if is_sel else ''}{short}"
+                    if st.button(
+                        btn_label,
+                        key=f"{key_prefix}_jump_{day_num}_{key}",
+                        use_container_width=True,
+                        type="primary" if is_sel else "secondary",
+                    ):
+                        st.session_state[pick_key] = key
+                        st.session_state.pop(f"{key_prefix}_viewing_done_{day_num}", None)
+                        st.rerun()
+            active_pending = str(st.session_state[pick_key])
 
     active_done: str | None = None
     if earned_keys:
@@ -7461,22 +7630,35 @@ def render_day_quest_nav(
             f"✅ Completed ({len(earned_keys)}) — review or edit past logs",
             expanded=not pending_keys,
         ):
-            dcols = st.columns(min(len(earned_keys), 3))
-            for i, key in enumerate(earned_keys):
-                row = earned_df[earned_df["activity_key"] == key].iloc[0]
-                short = str(row["title"])
-                if len(short) > 24:
-                    short = short[:22] + "…"
-                with dcols[i % len(dcols)]:
-                    if st.button(
-                        f"✅ {short}",
-                        key=f"{key_prefix}_view_done_{day_num}_{key}",
-                        use_container_width=True,
-                        type="primary" if st.session_state.get(done_key) == key else "secondary",
-                    ):
-                        st.session_state[done_key] = key
-                        st.session_state[f"{key_prefix}_viewing_done_{day_num}"] = True
-                        st.rerun()
+            if len(earned_keys) >= 4:
+                chosen_done = st.selectbox(
+                    "Completed quest",
+                    earned_keys,
+                    index=earned_keys.index(st.session_state[done_key]),
+                    format_func=lambda k: quest_pick_label(day_df, k),
+                    key=f"{key_prefix}_done_dropdown_{day_num}",
+                    label_visibility="collapsed",
+                )
+                if chosen_done != st.session_state[done_key]:
+                    st.session_state[done_key] = chosen_done
+                    st.session_state[f"{key_prefix}_viewing_done_{day_num}"] = True
+                    st.rerun()
+            else:
+                dcols = st.columns(min(len(earned_keys), 2))
+                for i, key in enumerate(earned_keys):
+                    short = str(earned_df[earned_df["activity_key"] == key].iloc[0]["title"])
+                    if len(short) > 24:
+                        short = short[:22] + "…"
+                    with dcols[i % len(dcols)]:
+                        if st.button(
+                            f"✅ {short}",
+                            key=f"{key_prefix}_view_done_{day_num}_{key}",
+                            use_container_width=True,
+                            type="primary" if st.session_state.get(done_key) == key else "secondary",
+                        ):
+                            st.session_state[done_key] = key
+                            st.session_state[f"{key_prefix}_viewing_done_{day_num}"] = True
+                            st.rerun()
             active_done = str(st.session_state[done_key])
             if pending_keys and not st.session_state.get(f"{key_prefix}_viewing_done_{day_num}"):
                 active_done = None
@@ -7890,6 +8072,27 @@ def render_day_detail(
     render_day_extras(df, bonus_df, day_num, key_prefix)
 
 
+def render_more_view(
+    df: pd.DataFrame,
+    encounters_df: pd.DataFrame,
+    partners_df: pd.DataFrame,
+    settings: dict,
+) -> None:
+    choice = st.radio(
+        "MoreMenu",
+        ["👥 Partners", "🔄 Swap", "⚙️ Settings"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="more_tab_radio",
+    )
+    if choice == "👥 Partners":
+        render_partners_tab(encounters_df, partners_df)
+    elif choice == "🔄 Swap":
+        render_substitution_pool(df)
+    else:
+        render_settings(settings)
+
+
 def render_substitution_pool(df: pd.DataFrame):
     st.markdown("### Substitution pool & recalibration")
     st.markdown(
@@ -7994,31 +8197,16 @@ def main():
 
     render_pending_celebrations(settings)
 
-    tab_labels = [
-        "📅 Calendar",
-        "✚ Log",
-        "📊 Stats",
-        "🗺️ Journey",
-        "👥 Partners",
-        "🔄 Swap",
-        "⚙️ Settings",
-    ]
     if "main_tab_radio" not in st.session_state:
-        st.session_state.main_tab_radio = "📅 Calendar"
-    # Migrate legacy default tab names
-    if st.session_state.get("main_tab_radio") in ("⚡ Today", "🗺️ Path", "📋 Quests"):
-        legacy = st.session_state.main_tab_radio
-        st.session_state.main_tab_radio = {
-            "⚡ Today": "✚ Log",
-            "🗺️ Path": "🗺️ Journey",
-            "📋 Quests": "✚ Log",
-        }.get(legacy, "📅 Calendar")
+        st.session_state.main_tab_radio = TAB_TODAY
+    elif st.session_state.main_tab_radio in _LEGACY_TAB_ALIASES:
+        st.session_state.main_tab_radio = _LEGACY_TAB_ALIASES[st.session_state.main_tab_radio]
 
-    apply_pending_navigation(tab_labels)
+    apply_pending_navigation(MAIN_TABS)
 
     selected_tab = st.radio(
-        "Navigate",
-        tab_labels,
+        "AppNavigate",
+        MAIN_TABS,
         horizontal=True,
         label_visibility="collapsed",
         key="main_tab_radio",
@@ -8029,43 +8217,20 @@ def main():
         stats,
         journey_day,
         partner_summary,
-        nice=(selected_tab != "🗺️ Journey"),
+        nice=(selected_tab != TAB_JOURNEY),
     )
 
-    if selected_tab == "📅 Calendar":
+    if selected_tab == TAB_TODAY:
         render_calendar_view(df, encounters_df, settings, journey_day, bonus_df, partners_df)
 
-    elif selected_tab == "✚ Log":
-        log_day = int(st.session_state.get("quests_day_pick", journey_day))
-        if log_day != journey_day:
-            st.caption(f"Logging Day {log_day} (catch-up / ahead) — switch day in Calendar or below.")
-            day_pick = st.selectbox(
-                "Day",
-                list(range(1, TOTAL_DAYS + 1)),
-                index=log_day - 1,
-                key="quests_day_pick",
-                format_func=lambda d: f"Day {d} — {day_plan_meta(d)['title']}",
-            )
-            log_day = day_pick
-        else:
-            log_day = journey_day
-        st.caption("Tap a quest photo, then complete — partner logs save automatically.")
-        render_day_detail(df, log_day, partners_df, bonus_df, encounters_df, key_prefix="today")
-
-    elif selected_tab == "📊 Stats":
+    elif selected_tab == TAB_STATS:
         render_stats_view(df, encounters_df, bonus_df, stats, partner_summary, settings)
 
-    elif selected_tab == "🗺️ Journey":
+    elif selected_tab == TAB_JOURNEY:
         render_dashboard(df, stats, journey_day, partner_summary, bonus_df)
 
-    elif selected_tab == "👥 Partners":
-        render_partners_tab(encounters_df, partners_df)
-
-    elif selected_tab == "🔄 Swap":
-        render_substitution_pool(df)
-
-    elif selected_tab == "⚙️ Settings":
-        render_settings(settings)
+    elif selected_tab == TAB_MORE:
+        render_more_view(df, encounters_df, partners_df, settings)
 
 
 if __name__ == "__main__":

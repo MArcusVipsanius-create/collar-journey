@@ -1,0 +1,17 @@
+{
+  "name": "Collar Journey",
+  "short_name": "Collar",
+  "description": "Cap d'Agde 14-day progress tracker",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1a1020",
+  "theme_color": "#1a1020",
+  "icons": [
+    {
+      "src": "app/static/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
