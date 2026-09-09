@@ -236,6 +236,8 @@ BRAND_THUMB = "brand_thumb.jpg"
 BRAND_ICON = "brand_icon.png"
 BRAND_JOURNEY_START = "journey_start.jpg"
 BRAND_JOURNEY_END = "journey_end.jpg"
+APPLE_TOUCH_ICON = "apple-touch-icon.png"
+STATIC_APPLE_TOUCH_ICON = "app/static/apple-touch-icon.png"
 
 # Which venue image to feature on path/calendar when a day has several.
 SIGNATURE_VENUE_PRIORITY = [
@@ -325,15 +327,16 @@ def brand_ring_class(pct: float, collar_earned: bool) -> str:
 
 
 def inject_ios_homescreen_meta() -> None:
-    """Help Safari treat Add to Home Screen like a standalone app."""
-    icon_uri = _brand_image_uri(BRAND_ICON) or _brand_image_uri(BRAND_PORTRAIT)
+    """Inject home-screen meta + icon into the main page (not the component iframe)."""
     title = json.dumps(APP_NAME)
-    icon_js = json.dumps(icon_uri) if icon_uri else '""'
+    static_path = json.dumps(STATIC_APPLE_TOUCH_ICON)
     components.html(
         f"""
 <script>
 (function() {{
-  const head = document.head;
+  const doc = window.parent.document;
+  const head = doc.head;
+  const icon = window.parent.location.origin + {static_path};
   [
     ["name", "apple-mobile-web-app-capable", "yes"],
     ["name", "apple-mobile-web-app-title", {title}],
@@ -342,17 +345,23 @@ def inject_ios_homescreen_meta() -> None:
     ["name", "theme-color", "#1a1020"],
   ].forEach(([attr, key, val]) => {{
     if (head.querySelector(`meta[${{attr}}="${{key}}"]`)) return;
-    const m = document.createElement("meta");
+    const m = doc.createElement("meta");
     m.setAttribute(attr, key);
     m.content = val;
     head.appendChild(m);
   }});
-  const icon = {icon_js};
-  if (icon && !head.querySelector('link[rel="apple-touch-icon"]')) {{
-    const link = document.createElement("link");
+  if (!head.querySelector('link[rel="apple-touch-icon"]')) {{
+    const link = doc.createElement("link");
     link.rel = "apple-touch-icon";
+    link.sizes = "180x180";
     link.href = icon;
     head.appendChild(link);
+  }}
+  if (!head.querySelector('link[rel="icon"]')) {{
+    const fav = doc.createElement("link");
+    fav.rel = "icon";
+    fav.href = icon;
+    head.appendChild(fav);
   }}
 }})();
 </script>
