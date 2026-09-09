@@ -458,6 +458,50 @@ def journey_milestone_html(filename: str, label: str, side_cls: str, size: int =
     )
 
 
+def journey_flank_photo_html(
+    filename: str,
+    label: str,
+    side: str,
+    *,
+    highlight: bool = False,
+) -> str:
+    """Full-height edge photo for flanked banners."""
+    uri = _brand_image_uri(filename)
+    if not uri:
+        return f'<div class="cj-banner-flank {side} empty"></div>'
+    pos = "center 22%" if side == "left" else "center 12%"
+    hl = " highlight" if highlight else ""
+    return (
+        f'<div class="cj-banner-flank {side}{hl}">'
+        f'<img src="{uri}" alt="" style="object-position:{pos};" />'
+        f'<div class="cj-banner-flank-label">{label}</div>'
+        f"</div>"
+    )
+
+
+def level_progress_bar_only_html(
+    stats: dict,
+    level: str,
+    level_desc: str,
+    *,
+    dark: bool = False,
+) -> str:
+    """Progress bar without side photos — for use inside flanked banners."""
+    pct = min(float(stats.get("pct", 0)), 100)
+    fill_cls = "gold" if stats.get("collar_earned") or pct >= 100 else ""
+    theme_cls = " dark" if dark else ""
+    return (
+        f'<div class="cj-level-bar-only{theme_cls}">'
+        f'<div class="dl-level-top compact">'
+        f"<span>{pct:.0f}% journey</span>"
+        f"<span>{level}</span>"
+        f"</div>"
+        f'<div class="dl-level-bar">'
+        f'<div class="dl-level-fill {fill_cls}" style="width:{pct}%;"></div>'
+        f"</div></div>"
+    )
+
+
 def level_progress_html(
     stats: dict,
     level: str,
@@ -1073,6 +1117,39 @@ def quest_day_tile_button_label(row, is_open: bool) -> str:
     if row["status"] == "earned":
         return f"✅ {short} · {slot}"
     return f"🎯 {short} · {slot} · {xp}"
+
+
+def quest_done_compact_html(row, selected: bool = False) -> str:
+    """Compact row for completed quests — tap to review or edit."""
+    loc = str(row["location"])
+    meta = LOCATIONS.get(loc, {})
+    uri = quest_pick_image_uri(row)
+    slot = time_slot_label(str(row["time_slot"]))
+    short = str(row["title"])
+    if len(short) > 36:
+        short = short[:34] + "…"
+    css = ["cj-quest-done-row"]
+    if selected:
+        css.append("selected")
+    if uri:
+        thumb = f'<img src="{uri}" class="cj-quest-done-thumb" alt="" />'
+    else:
+        thumb = f'<span class="cj-quest-done-emoji">{meta.get("icon", "📍")}</span>'
+    return (
+        f'<div class="{" ".join(css)}">'
+        f"{thumb}"
+        f'<div class="cj-quest-done-body">'
+        f'<div class="cj-quest-done-title">{short}</div>'
+        f'<div class="cj-quest-done-meta">{slot} · {activity_xp_badge(row)}</div>'
+        f"</div>"
+        f'<span class="cj-quest-done-check">✅</span>'
+        f"</div>"
+    )
+
+
+def quest_slot_header_html(group_key: str) -> str:
+    label = SLOT_GROUP_LABELS.get(group_key, group_key.title())
+    return f'<div class="cj-quest-slot-header">{label}</div>'
 
 
 def quest_pick_card_html(row, selected: bool = False) -> str:
@@ -2615,17 +2692,11 @@ div[data-testid="stToolbar"] { display: none; }
     display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;
 }
 .cj-journey-unified-hero {
-    display: flex; align-items: stretch; gap: 0.65rem;
     background: linear-gradient(135deg, #FFFFFF 0%, #F0FFE4 100%);
     border: 3px solid var(--dl-green-dark);
     border-radius: 20px;
-    padding: 0.7rem 0.8rem;
     box-shadow: 0 5px 0 var(--dl-green-dark);
     margin-bottom: 0.85rem;
-}
-.cj-journey-unified-body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-.cj-journey-unified-photo {
-    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
 }
 .cj-journey-unified-stats {
     color: var(--dl-muted); font-size: 0.74rem; font-weight: 700;
@@ -2648,55 +2719,66 @@ div[data-testid="stToolbar"] { display: none; }
 .cj-journey-unified-hero .cj-brand-frame {
     box-shadow: 0 6px 18px rgba(70,163,2,0.28), 0 0 0 2px rgba(88,204,2,0.22);
 }
-.cj-journey-unified-level {
-    margin: 0.28rem 0 0.12rem;
+.cj-rich-bar.cj-banner-flanked,
+.cj-journey-unified-hero.cj-banner-flanked {
+    display: flex; align-items: stretch; gap: 0;
+    padding: 0; overflow: hidden; min-height: 148px;
 }
-.cj-journey-unified-hero .cj-level-journey.compact {
-    margin: 0; gap: 0.4rem;
+.cj-banner-flank {
+    width: clamp(96px, 24vw, 156px); flex-shrink: 0; position: relative;
+    overflow: hidden; align-self: stretch;
 }
-.cj-journey-unified-hero .cj-level-journey.compact .cj-journey-milestone {
-    max-width: 68px;
+.cj-banner-flank img {
+    width: 100%; height: 100%; min-height: 148px;
+    object-fit: cover; display: block;
 }
-.cj-journey-unified-hero .cj-level-journey.compact .cj-journey-label {
-    font-size: 0.5rem; margin-top: 0.18rem;
+.cj-banner-flank::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
 }
-.cj-journey-unified-hero .cj-level-journey.compact .dl-level-top.compact {
-    font-size: 0.64rem; margin-bottom: 0.15rem;
+.cj-banner-flank.left::after {
+    background: linear-gradient(90deg, transparent 55%, rgba(26,16,32,0.92) 100%);
 }
-.cj-journey-unified-hero .cj-level-journey.compact .dl-level-bar {
-    height: 11px; border-width: 1px;
+.cj-banner-flank.right::after {
+    background: linear-gradient(270deg, transparent 55%, rgba(26,16,32,0.92) 100%);
 }
-.cj-journey-unified-photo.venue {
-    width: 76px; flex-shrink: 0; align-self: center;
-    border-radius: 12px; overflow: hidden;
-    border: 2px solid rgba(88,204,2,0.45);
-    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
-    line-height: 0;
+.cj-banner-flank.left {
+    border-right: 2px solid rgba(255,255,255,0.12);
 }
-.cj-journey-unified-photo.venue img {
-    width: 76px; height: 88px; object-fit: cover; object-position: center top;
-    display: block;
+.cj-journey-unified-hero.cj-banner-flanked .cj-banner-flank.left {
+    border-right-color: rgba(88,204,2,0.28);
 }
-.cj-journey-venue-cap {
-    font-size: 0.48rem; font-weight: 800; text-align: center;
-    padding: 0.18rem 0.15rem; background: rgba(240,255,228,0.95);
-    color: var(--dl-green-dark); line-height: 1.15;
+.cj-banner-flank.right {
+    border-left: 2px solid rgba(255,255,255,0.12);
 }
-.cj-rich-bar-level {
-    margin-top: 0.45rem; padding-top: 0.45rem;
-    border-top: 1px solid rgba(255,255,255,0.14);
+.cj-banner-flank.right.highlight {
+    box-shadow: inset 0 0 0 3px rgba(88,204,2,0.5);
 }
-.cj-rich-bar-level .cj-level-journey.compact { margin: 0; gap: 0.35rem; }
-.cj-rich-bar-level .cj-level-journey.compact .cj-journey-milestone { max-width: 58px; }
-.cj-rich-bar-level .cj-level-journey.compact .cj-journey-label {
-    color: #b8a8c4; font-size: 0.48rem;
+.cj-banner-flank-label {
+    position: absolute; bottom: 0; left: 0; right: 0; z-index: 1;
+    padding: 0.55rem 0.25rem 0.35rem;
+    font-family: Fredoka, sans-serif; font-size: 0.58rem; font-weight: 800;
+    text-align: center; letter-spacing: 0.05em; text-transform: uppercase;
+    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.88) 100%);
+    color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.55);
 }
-.cj-rich-bar-level .cj-level-journey.compact .dl-level-top.compact {
-    color: #e8dce8; font-size: 0.62rem; margin-bottom: 0.12rem;
+.cj-banner-flank.right.highlight .cj-banner-flank-label { color: #ffe082; }
+.cj-banner-flanked .cj-rich-bar-center,
+.cj-banner-flanked .cj-journey-unified-body {
+    flex: 1; min-width: 0; padding: 0.52rem 0.68rem;
+    display: flex; flex-direction: column; justify-content: center;
 }
-.cj-rich-bar-level .cj-level-journey.compact .dl-level-bar {
-    height: 10px; border-color: rgba(255,255,255,0.22); background: rgba(0,0,0,0.25);
+.cj-level-bar-only { margin-top: 0.35rem; }
+.cj-level-bar-only .dl-level-top.compact {
+    font-size: 0.64rem; margin-bottom: 0.12rem;
+    font-family: Fredoka, sans-serif; font-weight: 700;
 }
+.cj-level-bar-only .dl-level-bar { height: 11px; }
+.cj-level-bar-only.dark .dl-level-top.compact { color: #e8dce8; font-size: 0.6rem; }
+.cj-level-bar-only.dark .dl-level-top.compact span:last-child { color: #ffc800; }
+.cj-level-bar-only.dark .dl-level-bar {
+    height: 10px; background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.16);
+}
+.cj-banner-flanked .cj-rich-bar-chips { margin-top: 0.32rem; }
 .dl-path-hero-title {
     font-family: Fredoka, sans-serif; font-size: 1.75rem; font-weight: 700;
     color: var(--dl-green-dark); line-height: 1.15;
@@ -3415,6 +3497,54 @@ div[data-testid="stMarkdown"]:has(.cj-quest-day-tile.selected) + div[data-testid
     border-bottom: none;
     margin-bottom: 0;
 }
+.cj-quest-slot-header {
+    font-family: Fredoka, sans-serif; font-size: 0.82rem; font-weight: 800;
+    color: var(--dl-muted); letter-spacing: 0.02em;
+    margin: 0.9rem 0 0.4rem; padding-bottom: 0.22rem;
+    border-bottom: 2px dashed var(--dl-border);
+}
+.cj-quest-slot-header:first-child { margin-top: 0.15rem; }
+.cj-quest-done-row {
+    display: flex; align-items: center; gap: 0.55rem;
+    padding: 0.42rem 0.55rem; margin-bottom: 0.35rem;
+    border: 2px solid rgba(88,204,2,0.38); border-radius: 12px;
+    background: linear-gradient(90deg, #f6fff0 0%, #fff 100%);
+    box-shadow: var(--dl-shadow-sm);
+}
+.cj-quest-done-row.selected {
+    border-color: var(--dl-green-dark);
+    box-shadow: 0 0 0 2px rgba(88,204,2,0.18);
+}
+.cj-quest-done-thumb {
+    width: 44px; height: 44px; border-radius: 10px; object-fit: cover;
+    flex-shrink: 0; display: block;
+}
+.cj-quest-done-emoji {
+    width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; background: var(--dl-bg-soft);
+}
+.cj-quest-done-body { flex: 1; min-width: 0; }
+.cj-quest-done-title {
+    font-family: Fredoka, sans-serif; font-size: 0.78rem; font-weight: 700;
+    color: var(--dl-text); line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cj-quest-done-meta { font-size: 0.64rem; font-weight: 700; color: var(--dl-muted); margin-top: 0.08rem; }
+.cj-quest-done-check { font-size: 1rem; flex-shrink: 0; opacity: 0.85; }
+div[data-testid="stMarkdown"]:has(.cj-quest-done-row) + div[data-testid="stButton"] {
+    margin-top: -0.35rem; margin-bottom: 0.55rem;
+}
+div[data-testid="stMarkdown"]:has(.cj-quest-done-row.selected) + div[data-testid="stButton"] {
+    margin-bottom: 0;
+}
+div[data-testid="stMarkdown"]:has(.cj-quest-done-row) + div[data-testid="stButton"] button {
+    min-height: 40px; font-size: 0.74rem; font-weight: 700;
+    border-radius: 0 0 10px 10px; border-top: none;
+}
+div[data-testid="stMarkdown"]:has(.cj-quest-done-row.selected) + div[data-testid="stButton"] button {
+    border-radius: 0; border-bottom: none;
+}
 .cj-quest-tile-expand-mark {
     margin: 0 0 -0.35rem;
     padding: 0.45rem 0.65rem 0.35rem;
@@ -3900,12 +4030,18 @@ div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark.done) + div[data-te
     div[data-testid="stRadio"] label p {
         font-size: 0.82rem !important;
     }
-    .cj-rich-bar {
+    .cj-rich-bar:not(.cj-banner-flanked) {
         flex-wrap: wrap;
         gap: 0.65rem;
         padding: 0.65rem 0.75rem;
         border-radius: 16px;
     }
+    .cj-banner-flank { width: clamp(78px, 22vw, 112px); }
+    .cj-banner-flank img { min-height: 120px; }
+    .cj-rich-bar.cj-banner-flanked,
+    .cj-journey-unified-hero.cj-banner-flanked { min-height: 120px; border-radius: 16px; }
+    .cj-banner-flanked .cj-rich-bar-center,
+    .cj-banner-flanked .cj-journey-unified-body { padding: 0.45rem 0.52rem; }
     .cj-rich-bar-title { font-size: 1rem; }
     .cj-rich-bar-sub { font-size: 0.72rem; }
     .cj-rich-chip { font-size: 0.68rem; padding: 0.22rem 0.45rem; }
@@ -4006,9 +4142,6 @@ div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark.done) + div[data-te
     .cj-journey-unified-stats { font-size: 0.68rem; }
     .cj-journey-unified-hero .dl-collar-seg { width: 15px; height: 15px; font-size: 0.42rem; }
     .cj-journey-unified-hero .dl-collar-end { font-size: 1rem; }
-    .cj-journey-unified-photo.venue { width: 64px; }
-    .cj-journey-unified-photo.venue img { width: 64px; height: 74px; }
-    .cj-rich-bar-level .cj-level-journey.compact .cj-journey-milestone { max-width: 50px; }
     /* Hide wide tables on phone — cards remain */
     div[data-testid="stDataFrame"],
     div[data-testid="stArrowDataFrame"] {
@@ -5258,6 +5391,33 @@ def activity_xp_badge(row) -> str:
 
 def time_slot_label(slot: str) -> str:
     return TIME_SLOT_LABELS.get(slot, slot.replace("_", " ").title())
+
+
+TIME_SLOT_SORT_ORDER = {
+    "morning": 0,
+    "early_afternoon": 1,
+    "afternoon": 2,
+    "late_afternoon": 3,
+    "evening": 4,
+    "daytime": 5,
+    "special": 6,
+}
+
+SLOT_GROUP_ORDER = ("morning", "afternoon", "evening")
+
+SLOT_GROUP_LABELS = {
+    "morning": "🌅 Morning",
+    "afternoon": "☀️ Afternoon",
+    "evening": "🌙 Evening",
+}
+
+
+def quest_slot_group(slot: str) -> str:
+    if slot in {"morning"}:
+        return "morning"
+    if slot in {"evening", "special"}:
+        return "evening"
+    return "afternoon"
 
 
 BEFORE_NOON_SLOTS = {"morning"}
@@ -8026,33 +8186,12 @@ def collar_trail_html(df: pd.DataFrame, journey_day: int) -> str:
     return f'<div class="dl-collar-trail">{"".join(segs)}<span class="dl-collar-end">🔗</span></div>'
 
 
-def journey_side_venue_html(df: pd.DataFrame, journey_day: int) -> str:
-    """Today's lead venue photo for the right edge of the Journey banner."""
-    plan = day_path_visual_plan(df, journey_day)
-    banner = plan.get("banner")
-    if not banner:
-        return ""
-    uri = _venue_image_uri(str(banner["image"]))
-    if not uri:
-        return ""
-    label = str(banner.get("label") or banner.get("location") or "Today")
-    if len(label) > 14:
-        label = label[:12] + "…"
-    return (
-        f'<div class="cj-journey-unified-photo venue">'
-        f'<img src="{uri}" alt="" />'
-        f'<div class="cj-journey-venue-cap">{label}</div>'
-        f"</div>"
-    )
-
-
 def render_path_hero(df: pd.DataFrame, stats: dict, journey_day: int):
-    """Unified Journey banner — level bar + day trail + today's venue in one card."""
+    """Unified Journey banner — full-height flank photos + progress + day trail."""
     days_done = int(stats.get("days_complete", 0))
-    pct = int(stats.get("pct", 0))
     to_collar = max(0, TOTAL_DAYS - days_done)
     total_xp = format_points(float(stats.get("grand_total", 0)))
-    level, level_desc, _ = level_for_pct(pct)
+    level, level_desc, _ = level_for_pct(stats.get("pct", 0))
     today_meta = day_path_meta(journey_day)
     today_status = day_goal_status(df, journey_day)
     today_line = {
@@ -8064,20 +8203,22 @@ def render_path_hero(df: pd.DataFrame, stats: dict, journey_day: int):
         f"Day {journey_day}/{TOTAL_DAYS} · {days_done} cleared · "
         f"{total_xp} XP · {to_collar} to go"
     )
-    level_row = level_progress_html(stats, level, level_desc, compact=True)
-    side_photo = journey_side_venue_html(df, journey_day)
+    left = journey_flank_photo_html(BRAND_JOURNEY_START, "Day 1", "left")
+    right = journey_flank_photo_html(BRAND_JOURNEY_END, "Arrivée", "right", highlight=True)
+    bar = level_progress_bar_only_html(stats, level, level_desc, dark=False)
 
     st.markdown(
         f"""
-<div class="cj-journey-unified-hero cj-brand-path-hero">
+<div class="cj-journey-unified-hero cj-banner-flanked cj-brand-path-hero">
+  {left}
   <div class="cj-journey-unified-body">
     <div class="dl-path-hero-title">Road to the Collar</div>
     <div class="cj-journey-unified-stats">{stats_line}</div>
-    <div class="cj-journey-unified-level">{level_row}</div>
+    {bar}
     {collar_trail_html(df, journey_day)}
     <div class="cj-journey-unified-today">{today_line}</div>
   </div>
-  {side_photo}
+  {right}
 </div>
 """,
         unsafe_allow_html=True,
@@ -8494,15 +8635,13 @@ def render_nice_app_bar(
     stats: dict | None = None,
     partner_summary: dict | None = None,
 ):
-    """Compact but visually rich header — brand + journey chips."""
+    """Flanked banner — full-height Day 1 / Arrivée photos, content + bar in center."""
     name = settings.get("display_name", "Her journey")
-    ring = "start"
-    if stats:
-        ring = brand_ring_class(stats.get("pct", 0), stats.get("collar_earned", False))
-    portrait = brand_portrait_html(72, ring)
+    left = journey_flank_photo_html(BRAND_JOURNEY_START, "Day 1", "left")
+    right = journey_flank_photo_html(BRAND_JOURNEY_END, "Arrivée", "right", highlight=True)
     chips = ""
-    level_html = ""
-    if stats and partner_summary:
+    bar = ""
+    if stats and partner_summary is not None:
         total_fmt = format_points(float(stats.get("grand_total", 0)))
         streak = stats.get("max_streak", 0)
         partners = partner_summary.get("unique_partners", 0)
@@ -8515,21 +8654,18 @@ def render_nice_app_bar(
             f"</div>"
         )
         level, level_desc, _ = level_for_pct(stats.get("pct", 0))
-        level_html = (
-            f'<div class="cj-rich-bar-level">'
-            f"{level_progress_html(stats, level, level_desc, compact=True)}"
-            f"</div>"
-        )
+        bar = level_progress_bar_only_html(stats, level, level_desc, dark=True)
     st.markdown(
         f"""
-<div class="cj-rich-bar">
-  {portrait}
+<div class="cj-rich-bar cj-banner-flanked">
+  {left}
   <div class="cj-rich-bar-center">
     <div class="cj-rich-bar-title">{APP_NAME}</div>
     <div class="cj-rich-bar-sub">{name} · {APP_TAGLINE}</div>
     {chips}
-    {level_html}
+    {bar}
   </div>
+  {right}
 </div>
 """,
         unsafe_allow_html=True,
