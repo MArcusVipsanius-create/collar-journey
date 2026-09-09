@@ -324,6 +324,44 @@ def brand_ring_class(pct: float, collar_earned: bool) -> str:
     return "start"
 
 
+def inject_ios_homescreen_meta() -> None:
+    """Help Safari treat Add to Home Screen like a standalone app."""
+    icon_uri = _brand_image_uri(BRAND_ICON) or _brand_image_uri(BRAND_PORTRAIT)
+    title = json.dumps(APP_NAME)
+    icon_js = json.dumps(icon_uri) if icon_uri else '""'
+    components.html(
+        f"""
+<script>
+(function() {{
+  const head = document.head;
+  [
+    ["name", "apple-mobile-web-app-capable", "yes"],
+    ["name", "apple-mobile-web-app-title", {title}],
+    ["name", "apple-mobile-web-app-status-bar-style", "black-translucent"],
+    ["name", "mobile-web-app-capable", "yes"],
+    ["name", "theme-color", "#1a1020"],
+  ].forEach(([attr, key, val]) => {{
+    if (head.querySelector(`meta[${{attr}}="${{key}}"]`)) return;
+    const m = document.createElement("meta");
+    m.setAttribute(attr, key);
+    m.content = val;
+    head.appendChild(m);
+  }});
+  const icon = {icon_js};
+  if (icon && !head.querySelector('link[rel="apple-touch-icon"]')) {{
+    const link = document.createElement("link");
+    link.rel = "apple-touch-icon";
+    link.href = icon;
+    head.appendChild(link);
+  }}
+}})();
+</script>
+""",
+        height=0,
+        width=0,
+    )
+
+
 def brand_portrait_html(size: int = 112, ring_cls: str = "start") -> str:
     if size <= 120:
         fname = BRAND_THUMB
@@ -7924,6 +7962,7 @@ def main():
         page_icon=str(brand_icon) if brand_icon.is_file() else "🔗",
         layout="wide",
     )
+    inject_ios_homescreen_meta()
     st.markdown(THEME_CSS, unsafe_allow_html=True)
     password_gate(APP_NAME)
     init_db()
