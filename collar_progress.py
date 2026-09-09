@@ -1083,7 +1083,7 @@ def quest_pick_tile_html(row, selected: bool = False) -> str:
 
 
 def quest_day_tile_html(row, selected: bool = False) -> str:
-    """Photo tile for the day quest grid — pending and completed."""
+    """Compact square photo tile — title overlaid on image, no white footer."""
     is_earned = row["status"] == "earned"
     loc = str(row["location"])
     meta = LOCATIONS.get(loc, {})
@@ -1099,27 +1099,28 @@ def quest_day_tile_html(row, selected: bool = False) -> str:
         media = f'<div class="cj-quest-day-tile-emoji">{meta.get("icon", "📍")}</div>'
     chip = "✅" if is_earned else activity_xp_badge(row)
     short = str(row["title"])
-    if len(short) > 28:
-        short = short[:26] + "…"
+    if len(short) > 22:
+        short = short[:20] + "…"
     slot = time_slot_label(str(row["time_slot"]))
     return (
         f'<div class="{" ".join(css)}">'
+        f'<div class="cj-quest-day-tile-media">'
         f"{media}"
         f'<span class="cj-quest-day-tile-chip">{chip}</span>'
-        f'<div class="cj-quest-day-tile-foot">'
+        f'<div class="cj-quest-day-tile-overlay">'
         f'<div class="cj-quest-day-tile-title">{short}</div>'
         f'<div class="cj-quest-day-tile-slot">{slot}</div>'
-        f"</div>"
-        f"</div>"
+        f"</div></div></div>"
     )
 
 
 def quest_day_tile_button_label(row, is_open: bool) -> str:
+    short = str(row["title"])
+    if len(short) > 16:
+        short = short[:14] + "…"
     if is_open:
         return "▲ Close"
-    if row["status"] == "earned":
-        return "View / edit"
-    return "Open quest"
+    return f"▸ {short}"
 
 
 def quest_done_compact_html(row, selected: bool = False) -> str:
@@ -2981,8 +2982,8 @@ div[data-testid="stToolbar"] { display: none; }
 }
 .cj-quest-nav-done { color: var(--dl-green-dark); font-weight: 800; }
 .cj-quest-section-label {
-    font-family: Fredoka, sans-serif; font-size: 0.95rem; font-weight: 700;
-    color: var(--dl-text); margin: 0.5rem 0 0.35rem;
+    font-family: Fredoka, sans-serif; font-size: 0.82rem; font-weight: 700;
+    color: var(--dl-muted); margin: 0.15rem 0 0.25rem;
 }
 .cj-done-compact {
     background: #F0FFE4; border: 2px solid var(--dl-green-dark); border-radius: 14px;
@@ -3446,98 +3447,110 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
 }
 .cj-quest-pick-slot { font-size: 0.62rem; font-weight: 700; color: var(--dl-muted); }
 
-.cj-quest-day-grid { margin: 0.15rem 0 0.65rem; }
-.cj-quest-grid-wrap { margin-bottom: 0.15rem; }
+.cj-quest-day-grid { margin: 0 0 0.35rem; }
+.cj-quests-head {
+    font-family: Fredoka, sans-serif; font-size: 1rem; font-weight: 700;
+    color: var(--dl-text); margin: 0.35rem 0 0.15rem;
+}
 div[data-testid="stHorizontalBlock"]:has(.cj-quest-day-tile) {
-    gap: 0.45rem !important;
+    gap: 0.28rem !important;
     align-items: stretch !important;
+    margin-bottom: 0.22rem !important;
+}
+section.main div[data-testid="stVerticalBlock"]:has(.cj-quest-day-tile) {
+    gap: 0.25rem !important;
 }
 div[data-testid="stHorizontalBlock"]:has(.cj-quest-day-tile) > div[data-testid="column"] {
     min-width: 0;
-}
-.cj-quest-day-tile {
-    position: relative;
-    border: 2px solid var(--dl-border); border-radius: 12px 12px 0 0;
-    overflow: hidden; background: white;
-    box-shadow: var(--dl-shadow-sm);
-    height: 100%;
-}
-.cj-quest-day-tile-foot {
-    padding: 0.32rem 0.42rem 0.38rem;
     background: #fff;
-    border-top: 1px solid rgba(0,0,0,0.06);
+    border: 2px solid var(--dl-border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+div[data-testid="column"]:has(.cj-quest-day-tile.selected) {
+    border-color: var(--dl-orange);
+    box-shadow: 0 0 0 2px rgba(255,159,67,0.22);
+}
+div[data-testid="column"]:has(.cj-quest-day-tile.earned) {
+    border-color: rgba(88,204,2,0.42);
+}
+div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) { margin-bottom: 0 !important; }
+div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) p { margin: 0 !important; }
+.cj-quest-day-tile { position: relative; overflow: hidden; background: #1a1020; }
+.cj-quest-day-tile-media {
+    position: relative; aspect-ratio: 5 / 4; overflow: hidden; background: #2a2030;
+    min-height: 72px;
+}
+.cj-quest-day-tile-img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; object-position: center 22%; display: block;
+}
+.cj-quest-day-tile-emoji {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.65rem; background: var(--dl-bg-soft);
+}
+.cj-quest-day-tile-overlay {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 1;
+    padding: 1.4rem 0.35rem 0.32rem;
+    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.82) 100%);
 }
 .cj-quest-day-tile-title {
-    font-family: Fredoka, sans-serif; font-size: 0.7rem; font-weight: 700;
-    color: var(--dl-text); line-height: 1.2;
+    font-family: Fredoka, sans-serif; font-size: 0.64rem; font-weight: 700;
+    color: #fff; line-height: 1.15;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-    overflow: hidden; min-height: 1.65em;
+    overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.45);
 }
 .cj-quest-day-tile-slot {
-    font-size: 0.58rem; font-weight: 700; color: var(--dl-muted); margin-top: 0.1rem;
+    font-size: 0.52rem; font-weight: 700; color: rgba(255,255,255,0.82); margin-top: 0.06rem;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cj-quest-day-tile-chip {
-    position: absolute; top: 0.4rem; right: 0.4rem;
-    font-family: Fredoka, sans-serif; font-size: 0.65rem; font-weight: 700;
-    color: #8B6914; background: rgba(255,255,255,0.92);
-    padding: 0.12rem 0.38rem; border-radius: 999px;
+    position: absolute; top: 0.28rem; right: 0.28rem; z-index: 2;
+    font-family: Fredoka, sans-serif; font-size: 0.58rem; font-weight: 700;
+    color: #8B6914; background: rgba(255,255,255,0.94);
+    padding: 0.08rem 0.3rem; border-radius: 999px;
     border: 1px solid rgba(0,0,0,0.08);
-    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
 }
 .cj-quest-day-tile.earned .cj-quest-day-tile-chip {
     color: var(--dl-green-dark); background: rgba(240,255,228,0.95);
 }
-.cj-quest-day-tile.selected {
-    border-color: var(--dl-orange);
-    box-shadow: 0 0 0 2px rgba(255,159,67,0.25);
-}
-.cj-quest-day-tile.earned { border-color: rgba(88,204,2,0.45); }
-.cj-quest-day-tile.earned.selected {
-    border-color: var(--dl-green-dark);
-    box-shadow: 0 0 0 2px rgba(88,204,2,0.2);
-}
-.cj-quest-day-tile-img {
-    width: 100%; height: 88px; object-fit: cover; object-position: center top;
-    display: block;
-}
-.cj-quest-day-tile-emoji {
-    height: 88px; display: flex; align-items: center; justify-content: center;
-    font-size: 2rem; background: var(--dl-bg-soft);
-}
 div[data-testid="column"] div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButton"],
 div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButton"] {
-    margin-top: -0.35rem;
-    margin-bottom: 0.55rem;
+    margin: 0 !important;
 }
 div[data-testid="column"] div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButton"] button,
 div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButton"] button {
-    min-height: 36px;
-    font-size: 0.68rem;
-    padding: 0.25rem 0.4rem;
+    border: none !important;
+    border-top: 1px solid rgba(0,0,0,0.08) !important;
+    border-radius: 0 !important;
+    min-height: 26px !important;
+    max-height: 26px !important;
+    padding: 0 !important;
+    font-size: 0.72rem !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    box-shadow: none !important;
 }
-div[data-testid="stMarkdown"]:has(.cj-quest-day-tile.selected) + div[data-testid="stButton"] {
-    margin-bottom: 0;
+div[data-testid="column"]:has(.cj-quest-day-tile.selected) div[data-testid="stButton"] button {
+    background: var(--dl-orange) !important;
+    color: #fff !important;
 }
-div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButton"] button {
-    border-radius: 0 0 14px 14px;
-    border-top: none;
-    min-height: 44px;
-    font-size: 0.78rem;
-    font-weight: 700;
-}
-div[data-testid="stMarkdown"]:has(.cj-quest-day-tile.selected) + div[data-testid="stButton"] button {
-    border-radius: 0;
-    border-bottom: none;
-    margin-bottom: 0;
+section.main div[data-testid="column"] div[data-testid="stButton"] {
+    position: static !important;
+    z-index: auto !important;
+    padding-top: 0 !important;
+    background: transparent !important;
 }
 .cj-quest-slot-header {
-    font-family: Fredoka, sans-serif; font-size: 0.82rem; font-weight: 800;
+    font-family: Fredoka, sans-serif; font-size: 0.76rem; font-weight: 800;
     color: var(--dl-muted); letter-spacing: 0.02em;
-    margin: 0.9rem 0 0.4rem; padding-bottom: 0.22rem;
-    border-bottom: 2px dashed var(--dl-border);
+    margin: 0.55rem 0 0.28rem; padding-bottom: 0.15rem;
+    border-bottom: 1px dashed var(--dl-border);
 }
-.cj-quest-slot-header:first-child { margin-top: 0.15rem; }
+.cj-quest-slot-header:first-child { margin-top: 0.05rem; }
 .cj-quest-done-row {
     display: flex; align-items: center; gap: 0.55rem;
     padding: 0.42rem 0.55rem; margin-bottom: 0.35rem;
@@ -3579,43 +3592,18 @@ div[data-testid="stMarkdown"]:has(.cj-quest-done-row) + div[data-testid="stButto
 div[data-testid="stMarkdown"]:has(.cj-quest-done-row.selected) + div[data-testid="stButton"] button {
     border-radius: 0; border-bottom: none;
 }
-.cj-quest-tile-expand-mark {
-    margin: 0 0 -0.35rem;
-    padding: 0.45rem 0.65rem 0.35rem;
-    border: 2px solid var(--dl-orange);
-    border-bottom: none;
-    border-radius: 0;
-    background: linear-gradient(180deg, rgba(255,248,225,0.95) 0%, #fff 100%);
-    font-family: Fredoka, sans-serif;
-    font-size: 0.82rem;
-    font-weight: 700;
-    color: var(--dl-text);
+.cj-quest-panel-title {
+    font-family: Fredoka, sans-serif; font-size: 0.92rem; font-weight: 700;
+    color: var(--dl-text); margin: 0 0 0.15rem;
 }
-.cj-quest-tile-expand-mark.done {
-    border-color: rgba(88,204,2,0.65);
-    background: linear-gradient(180deg, rgba(240,255,228,0.95) 0%, #fff 100%);
+div[data-testid="stVerticalBlockBorderWrapper"]:has(#cj-open-quest-panel) {
+    margin: 0.25rem 0 0.45rem !important;
+    scroll-margin-top: 4.5rem;
 }
-div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark) + div[data-testid="stVerticalBlockBorderWrapper"] {
-    margin-top: 0 !important;
-    margin-bottom: 0.85rem !important;
-}
-div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark) + div[data-testid="stVerticalBlockBorderWrapper"] > div {
+div[data-testid="stVerticalBlockBorderWrapper"]:has(#cj-open-quest-panel) > div {
     border-color: var(--dl-orange) !important;
-    border-top: none !important;
-    border-radius: 0 0 16px 16px !important;
-}
-div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark.done) + div[data-testid="stVerticalBlockBorderWrapper"] > div {
-    border-color: rgba(88,204,2,0.65) !important;
-}
-.cj-quest-expand-panel {
-    border: 2px solid var(--dl-orange); border-radius: 18px;
-    padding: 0.85rem 0.9rem 0.5rem; margin: 0.35rem 0 0.85rem;
-    background: linear-gradient(180deg, rgba(255,248,225,0.55) 0%, #fff 72%);
-    box-shadow: var(--dl-shadow-sm);
-}
-.cj-quest-expand-panel.done {
-    border-color: rgba(88,204,2,0.55);
-    background: linear-gradient(180deg, rgba(240,255,228,0.65) 0%, #fff 72%);
+    border-radius: 14px !important;
+    background: linear-gradient(180deg, rgba(255,248,225,0.35) 0%, #fff 55%) !important;
 }
 
 .cj-polaroid {
@@ -4116,10 +4104,12 @@ div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark.done) + div[data-te
     .nice-stat-value { font-size: 1.25rem; }
     .cj-quest-pick-tile-img,
     .cj-quest-pick-tile-emoji { height: 150px; }
-    .cj-quest-day-tile-img,
-    .cj-quest-day-tile-emoji { height: 76px; }
-    .cj-quest-day-tile-title { font-size: 0.66rem; }
-    .cj-quest-day-tile-slot { font-size: 0.54rem; }
+    div[data-testid="stHorizontalBlock"]:has(.cj-quest-day-tile) {
+        gap: 0.22rem !important;
+    }
+    .cj-quest-day-tile-title { font-size: 0.6rem; }
+    .cj-quest-day-tile-slot { font-size: 0.48rem; }
+    .cj-quest-day-tile-chip { font-size: 0.52rem; padding: 0.06rem 0.24rem; }
     .cj-quest-hero.featured,
     .cj-quest-scene .cj-quest-hero { height: 180px; }
     .cj-qakc-solo.featured { max-width: 100%; height: 220px; }
@@ -4172,15 +4162,17 @@ div[data-testid="stMarkdown"]:has(.cj-quest-tile-expand-mark.done) + div[data-te
     section.main div[data-testid="stRadio"]:has([aria-label="AppNavigate"]) label p {
         font-size: 0.72rem !important;
     }
-    /* Sticky complete buttons above bottom nav */
-    section.main div[data-testid="stButton"]:has(button[kind="primary"]) {
+    /* Sticky complete buttons above bottom nav — not quest tile taps */
+    section.main div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stButton"]:has(button[kind="primary"]),
+    section.main div[data-testid="stVerticalBlock"] > div[data-testid="stButton"]:has(button[kind="primary"]) {
         position: sticky;
         bottom: calc(4.75rem + env(safe-area-inset-bottom));
         z-index: 900;
         padding-top: 0.35rem;
         background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.92) 35%);
     }
-    section.main div[data-testid="stButton"]:has(button[kind="primary"]) button {
+    section.main div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stButton"]:has(button[kind="primary"]) button,
+    section.main div[data-testid="stVerticalBlock"] > div[data-testid="stButton"]:has(button[kind="primary"]) button {
         box-shadow: 0 4px 18px rgba(88,204,2,0.35);
     }
     /* Journey path — compact on phone */
@@ -9154,11 +9146,6 @@ def render_calendar_view(
         unsafe_allow_html=True,
     )
 
-    st.markdown(
-        day_venue_strip_html(df, pick, max_icons=6, size=36),
-        unsafe_allow_html=True,
-    )
-
     with st.expander("📅 Pick another day", expanded=not is_today):
         other = st.selectbox(
             "Day",
@@ -9175,9 +9162,11 @@ def render_calendar_view(
     if partners_df is None:
         partners_df = load_partners_df()
 
-    st.divider()
-    st.markdown("##### Complete quests")
-    st.caption("📸 Quest, location & partner photos — upload and tag on the **Photos** tab.")
+    st.markdown(
+        '<div class="cj-quests-head">Complete quests</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("Tap ▸ on a tile · photos on **Photos** tab")
     render_day_detail(
         df,
         pick,
@@ -9412,22 +9401,20 @@ def _render_inline_quest_panel(
     encounters_df: pd.DataFrame,
     sub_pool: pd.DataFrame,
 ) -> None:
-    """Expand quest inputs directly under the tapped tile."""
+    """Expand quest inputs directly under the tapped tile row."""
     is_earned = row["status"] == "earned"
-    mark_cls = "cj-quest-tile-expand-mark done" if is_earned else "cj-quest-tile-expand-mark"
     lead = "✅" if is_earned else "🎯"
-    st.markdown(
-        f'<div id="cj-open-quest-panel" class="{mark_cls}">{lead} {row["title"]}</div>',
-        unsafe_allow_html=True,
-    )
     with st.container(border=True):
+        st.markdown(
+            f'<div id="cj-open-quest-panel" class="cj-quest-panel-title">{lead} {row["title"]}</div>',
+            unsafe_allow_html=True,
+        )
         st.caption(str(row["description"]))
         if is_earned:
             _render_quest_done_panel(row, day_num, key_prefix, partners_df)
-        else:
-            maybe_render_quest_quick_complete(
-                row, day_num, key_prefix, partners_df, encounters_df
-            )
+        elif not maybe_render_quest_quick_complete(
+            row, day_num, key_prefix, partners_df, encounters_df
+        ):
             _render_quest_log_panel(
                 row, df, day_num, key_prefix, partners_df, encounters_df, sub_pool
             )
@@ -9438,7 +9425,11 @@ def _quest_grid_cols(count: int) -> int:
         return 1
     if count == 2:
         return 2
-    return 3 if count >= 5 else 2
+    if count <= 4:
+        return 2
+    if count >= 8:
+        return 4
+    return 3
 
 
 def _render_quest_tile_cell(
@@ -9533,11 +9524,12 @@ def _render_quest_tile_grid(
     encounters_df: pd.DataFrame | None,
     sub_pool: pd.DataFrame | None,
 ) -> None:
-    """Photo tiles in a 2–3 column grid; open panel spans full width below the grid."""
+    """Photo tiles in a responsive grid; open panel appears right below its row."""
     cols_per_row = _quest_grid_cols(len(keys))
+    open_id = str(open_quest) if open_quest else None
     for i in range(0, len(keys), cols_per_row):
         chunk = keys[i : i + cols_per_row]
-        cols = st.columns(len(chunk))
+        cols = st.columns(len(chunk), gap="small")
         for col, key in zip(cols, chunk):
             with col:
                 row = day_df[day_df["activity_key"] == key].iloc[0]
@@ -9545,11 +9537,11 @@ def _render_quest_tile_grid(
                     row, day_num, key_prefix, open_key, open_quest, compact=False
                 )
 
-    if open_quest in keys:
-        row = day_df[day_df["activity_key"] == open_quest].iloc[0]
-        _render_quest_open_panel(
-            row, day_num, key_prefix, df, partners_df, encounters_df, sub_pool
-        )
+        if open_id and open_id in chunk:
+            row = day_df[day_df["activity_key"] == open_id].iloc[0]
+            _render_quest_open_panel(
+                row, day_num, key_prefix, df, partners_df, encounters_df, sub_pool
+            )
 
 
 def render_day_quest_nav(
@@ -9573,13 +9565,10 @@ def render_day_quest_nav(
 
     pending_groups = _pending_by_slot_group(day_df)
     earned_keys = _earned_quest_keys(day_df)
-    open_quest = st.session_state.get(open_key)
+    open_quest_raw = st.session_state.get(open_key)
+    open_quest = str(open_quest_raw) if open_quest_raw is not None else None
 
     if pending_groups:
-        st.markdown(
-            '<div class="cj-quest-section-label">🎯 Tap a quest to complete</div>',
-            unsafe_allow_html=True,
-        )
         for group_key in SLOT_GROUP_ORDER:
             keys = pending_groups.get(group_key, [])
             if not keys:
