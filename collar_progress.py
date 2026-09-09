@@ -6077,11 +6077,7 @@ def save_journey_media(
     return True, media_id
 
 
-def rotate_journey_media(media_id: str, direction: str) -> tuple[bool, str]:
-    """Rotate a saved photo in place — left, right, or flip (180°)."""
-    direction = str(direction).lower()
-    if direction not in ("left", "right", "flip"):
-        return False, "Invalid rotation."
+def _journey_media_path(media_id: str) -> tuple[Path | None, str | None]:
     conn = get_conn()
     row = conn.execute(
         "SELECT filename FROM journey_media WHERE media_id = ?",
@@ -6089,12 +6085,43 @@ def rotate_journey_media(media_id: str, direction: str) -> tuple[bool, str]:
     ).fetchone()
     conn.close()
     if not row:
-        return False, "Photo not found."
+        return None, "Photo not found."
     path = media_file_path(str(row["filename"]))
     if not path:
-        return False, "Image file missing on this device."
+        return None, "Image file missing on this device."
+    return path, None
+
+
+def _save_pil_to_media_file(path: Path, image) -> None:
+    """Write a PIL image back to an existing journey media file."""
+    from PIL import Image
+
     ext = path.suffix.lower()
-    if ext == ".gif":
+    out = image
+    save_kwargs: dict = {}
+    if ext in (".jpg", ".jpeg"):
+        if out.mode in ("RGBA", "P", "LA"):
+            out = out.convert("RGB")
+        save_kwargs = {"quality": 92, "optimize": True}
+    elif ext == ".webp":
+        save_kwargs = {"quality": 92}
+    fmt = ext.lstrip(".").upper()
+    if fmt == "JPG":
+        fmt = "JPEG"
+    with Image.open(path) as original:
+        file_fmt = original.format or fmt
+    out.save(path, format=file_fmt, **save_kwargs)
+
+
+def rotate_journey_media(media_id: str, direction: str) -> tuple[bool, str]:
+    """Rotate a saved photo in place — left, right, or flip (180°)."""
+    direction = str(direction).lower()
+    if direction not in ("left", "right", "flip"):
+        return False, "Invalid rotation."
+    path, err = _journey_media_path(media_id)
+    if not path:
+        return False, err or "Photo not found."
+    if path.suffix.lower() == ".gif":
         return False, "GIF rotation is not supported — save as JPG or PNG."
     try:
         from PIL import Image
@@ -6108,19 +6135,24 @@ def rotate_journey_media(media_id: str, direction: str) -> tuple[bool, str]:
     try:
         with Image.open(path) as im:
             rotated = im.transpose(transpose_map[direction])
-            save_kwargs: dict = {}
-            if ext in (".jpg", ".jpeg"):
-                if rotated.mode in ("RGBA", "P", "LA"):
-                    rotated = rotated.convert("RGB")
-                save_kwargs = {"quality": 92, "optimize": True}
-            elif ext == ".webp":
-                save_kwargs = {"quality": 92}
-            fmt = im.format or ext.lstrip(".").upper()
-            if fmt == "JPG":
-                fmt = "JPEG"
-            rotated.save(path, format=fmt, **save_kwargs)
+            _save_pil_to_media_file(path, rotated)
     except OSError:
         return False, "Could not rotate photo."
+    clear_image_caches()
+    return True, "ok"
+
+
+def crop_journey_media(media_id: str, cropped_image) -> tuple[bool, str]:
+    """Replace a saved photo with a cropped version."""
+    path, err = _journey_media_path(media_id)
+    if not path:
+        return False, err or "Photo not found."
+    if path.suffix.lower() == ".gif":
+        return False, "GIF crop is not supported — save as JPG or PNG."
+    try:
+        _save_pil_to_media_file(path, cropped_image)
+    except OSError:
+        return False, "Could not save cropped photo."
     clear_image_caches()
     return True, "ok"
 
@@ -6212,6 +6244,14 @@ def media_slide_label(
     return caption or "Journey memory"
 
 
+def _media_crop_session_key(key_prefix: str) -> str:
+    return f"{key_prefix}_crop_media_id"
+
+
+def _clear_media_crop(key_prefix: str) -> None:
+    st.session_state.pop(_media_crop_session_key(key_prefix), None)
+
+
 def _render_media_rotate_buttons(media_id: str, key_prefix: str) -> None:
     """↺ ↻ 180° — rewrite the saved file in place."""
     rot_left, rot_right, rot_flip = st.columns(3)
@@ -6257,6 +6297,85 @@ def _render_media_rotate_buttons(media_id: str, key_prefix: str) -> None:
                 st.warning(msg)
 
 
+def _render_media_crop_editor(media_id: str, key_prefix: str) -> None:
+    """Interactive crop UI — drag box, then save."""
+    mid = str(media_id)
+    crop_key = _media_crop_session_key(key_prefix)
+    path, err = _journey_media_path(mid)
+    if not path:
+        st.warning(err or "Photo not found.")
+        _clear_media_crop(key_prefix)
+        return
+    if path.suffix.lower() == ".gif":
+        st.warning("GIF crop is not supported — re-upload as JPG or PNG.")
+        if st.button("Done", key=f"{key_prefix}_crop_gif_done_{mid}", use_container_width=True):
+            _clear_media_crop(key_prefix)
+            st.rerun()
+        return
+    try:
+        from PIL import Image
+        from streamlit_cropper import st_cropper
+    except ImportError:
+        st.warning("Install streamlit-cropper and Pillow to crop photos.")
+        if st.button("Close", key=f"{key_prefix}_crop_missing_{mid}", use_container_width=True):
+            _clear_media_crop(key_prefix)
+            st.rerun()
+        return
+
+    with Image.open(path) as im:
+        pil = im.convert("RGBA") if im.mode in ("RGBA", "LA", "P") else im.convert("RGB")
+
+    st.caption("Drag the crop box, then tap **Save crop**.")
+    cropped = st_cropper(
+        pil,
+        realtime_update=True,
+        return_type="image",
+        box_color="#FF9600",
+        key=f"{key_prefix}_cropper_{mid}",
+    )
+    save_col, cancel_col = st.columns(2)
+    with save_col:
+        if st.button(
+            "Save crop",
+            key=f"{key_prefix}_crop_save_{mid}",
+            type="primary",
+            use_container_width=True,
+        ):
+            ok, msg = crop_journey_media(mid, cropped)
+            if ok:
+                _clear_media_crop(key_prefix)
+                st.toast("Crop saved")
+                st.rerun()
+            else:
+                st.warning(msg)
+    with cancel_col:
+        if st.button(
+            "Cancel",
+            key=f"{key_prefix}_crop_cancel_{mid}",
+            use_container_width=True,
+        ):
+            _clear_media_crop(key_prefix)
+            st.rerun()
+
+
+def _render_media_photo_tools(media_id: str, key_prefix: str) -> None:
+    """Rotate + crop controls for a saved photo."""
+    mid = str(media_id)
+    crop_key = _media_crop_session_key(key_prefix)
+    if st.session_state.get(crop_key) == mid:
+        _render_media_crop_editor(mid, key_prefix)
+        return
+    _render_media_rotate_buttons(mid, key_prefix)
+    if st.button(
+        "✂️ Crop",
+        key=f"{key_prefix}_crop_open_{mid}",
+        use_container_width=True,
+        help="Crop this photo",
+    ):
+        st.session_state[crop_key] = mid
+        st.rerun()
+
+
 def render_media_thumbnail_grid(
     media_df: pd.DataFrame,
     key_prefix: str,
@@ -6280,12 +6399,15 @@ def render_media_thumbnail_grid(
         if not path:
             continue
         with cols[i % len(cols)]:
-            st.image(str(path), use_container_width=True)
+            mid = str(row["media_id"])
+            cropping = rotatable and st.session_state.get(_media_crop_session_key(key_prefix)) == mid
+            if not cropping:
+                st.image(str(path), use_container_width=True)
             cap = str(row.get("caption") or row.get("original_name") or "")
             if cap:
                 st.caption(cap if len(cap) <= 40 else cap[:38] + "…")
             if rotatable:
-                _render_media_rotate_buttons(str(row["media_id"]), key_prefix)
+                _render_media_photo_tools(mid, key_prefix)
             if deletable and st.button(
                 "🗑 Remove",
                 key=f"{key_prefix}_del_media_{row['media_id']}",
@@ -6488,10 +6610,13 @@ def render_tagged_media_library(
         )
         tag = media_slide_label(row, df, partners_df, settings)
         with cols[i % 2]:
-            st.image(str(path), use_container_width=True)
+            mid = str(row["media_id"])
+            cropping = st.session_state.get(_media_crop_session_key("photos_lib")) == mid
+            if not cropping:
+                st.image(str(path), use_container_width=True)
             st.markdown(f"**{kind_label}**")
             st.caption(tag if len(tag) <= 72 else tag[:70] + "…")
-            _render_media_rotate_buttons(str(row["media_id"]), "photos_lib")
+            _render_media_photo_tools(mid, "photos_lib")
             if st.button(
                 "🗑 Remove",
                 key=f"photos_lib_del_{row['media_id']}",
