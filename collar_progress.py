@@ -6077,6 +6077,54 @@ def save_journey_media(
     return True, media_id
 
 
+def rotate_journey_media(media_id: str, direction: str) -> tuple[bool, str]:
+    """Rotate a saved photo in place — left, right, or flip (180°)."""
+    direction = str(direction).lower()
+    if direction not in ("left", "right", "flip"):
+        return False, "Invalid rotation."
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT filename FROM journey_media WHERE media_id = ?",
+        (media_id,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return False, "Photo not found."
+    path = media_file_path(str(row["filename"]))
+    if not path:
+        return False, "Image file missing on this device."
+    ext = path.suffix.lower()
+    if ext == ".gif":
+        return False, "GIF rotation is not supported — save as JPG or PNG."
+    try:
+        from PIL import Image
+    except ImportError:
+        return False, "Pillow is required for rotation (pip install Pillow)."
+    transpose_map = {
+        "left": Image.Transpose.ROTATE_90,
+        "right": Image.Transpose.ROTATE_270,
+        "flip": Image.Transpose.ROTATE_180,
+    }
+    try:
+        with Image.open(path) as im:
+            rotated = im.transpose(transpose_map[direction])
+            save_kwargs: dict = {}
+            if ext in (".jpg", ".jpeg"):
+                if rotated.mode in ("RGBA", "P", "LA"):
+                    rotated = rotated.convert("RGB")
+                save_kwargs = {"quality": 92, "optimize": True}
+            elif ext == ".webp":
+                save_kwargs = {"quality": 92}
+            fmt = im.format or ext.lstrip(".").upper()
+            if fmt == "JPG":
+                fmt = "JPEG"
+            rotated.save(path, format=fmt, **save_kwargs)
+    except OSError:
+        return False, "Could not rotate photo."
+    clear_image_caches()
+    return True, "ok"
+
+
 def delete_journey_media(media_id: str) -> None:
     conn = get_conn()
     row = conn.execute(
@@ -6164,11 +6212,57 @@ def media_slide_label(
     return caption or "Journey memory"
 
 
+def _render_media_rotate_buttons(media_id: str, key_prefix: str) -> None:
+    """↺ ↻ 180° — rewrite the saved file in place."""
+    rot_left, rot_right, rot_flip = st.columns(3)
+    mid = str(media_id)
+    with rot_left:
+        if st.button(
+            "↺ Left",
+            key=f"{key_prefix}_rot_l_{mid}",
+            use_container_width=True,
+            help="Rotate 90° counter-clockwise",
+        ):
+            ok, msg = rotate_journey_media(mid, "left")
+            if ok:
+                st.toast("Rotated left")
+                st.rerun()
+            else:
+                st.warning(msg)
+    with rot_right:
+        if st.button(
+            "↻ Right",
+            key=f"{key_prefix}_rot_r_{mid}",
+            use_container_width=True,
+            help="Rotate 90° clockwise",
+        ):
+            ok, msg = rotate_journey_media(mid, "right")
+            if ok:
+                st.toast("Rotated right")
+                st.rerun()
+            else:
+                st.warning(msg)
+    with rot_flip:
+        if st.button(
+            "180°",
+            key=f"{key_prefix}_rot_f_{mid}",
+            use_container_width=True,
+            help="Flip upside down",
+        ):
+            ok, msg = rotate_journey_media(mid, "flip")
+            if ok:
+                st.toast("Rotated 180°")
+                st.rerun()
+            else:
+                st.warning(msg)
+
+
 def render_media_thumbnail_grid(
     media_df: pd.DataFrame,
     key_prefix: str,
     *,
     deletable: bool = True,
+    rotatable: bool = True,
 ) -> None:
     if media_df.empty:
         return
@@ -6190,6 +6284,8 @@ def render_media_thumbnail_grid(
             cap = str(row.get("caption") or row.get("original_name") or "")
             if cap:
                 st.caption(cap if len(cap) <= 40 else cap[:38] + "…")
+            if rotatable:
+                _render_media_rotate_buttons(str(row["media_id"]), key_prefix)
             if deletable and st.button(
                 "🗑 Remove",
                 key=f"{key_prefix}_del_media_{row['media_id']}",
@@ -6395,6 +6491,7 @@ def render_tagged_media_library(
             st.image(str(path), use_container_width=True)
             st.markdown(f"**{kind_label}**")
             st.caption(tag if len(tag) <= 72 else tag[:70] + "…")
+            _render_media_rotate_buttons(str(row["media_id"]), "photos_lib")
             if st.button(
                 "🗑 Remove",
                 key=f"photos_lib_del_{row['media_id']}",
