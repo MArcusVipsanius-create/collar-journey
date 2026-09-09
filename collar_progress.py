@@ -1016,6 +1016,43 @@ def quest_pick_tile_html(row, selected: bool = False) -> str:
     )
 
 
+def quest_day_tile_html(row, selected: bool = False) -> str:
+    """Photo tile for the day quest grid — pending and completed."""
+    is_earned = row["status"] == "earned"
+    loc = str(row["location"])
+    meta = LOCATIONS.get(loc, {})
+    uri = quest_pick_image_uri(row)
+    css = ["cj-quest-day-tile"]
+    if selected:
+        css.append("selected")
+    if is_earned:
+        css.append("earned")
+    if uri:
+        media = f'<img src="{uri}" class="cj-quest-day-tile-img" alt="" />'
+    else:
+        media = f'<div class="cj-quest-day-tile-emoji">{meta.get("icon", "📍")}</div>'
+    chip = "✅" if is_earned else activity_xp_badge(row)
+    return (
+        f'<div class="{" ".join(css)}">'
+        f"{media}"
+        f'<span class="cj-quest-day-tile-chip">{chip}</span>'
+        f"</div>"
+    )
+
+
+def quest_day_tile_button_label(row, is_open: bool) -> str:
+    short = str(row["title"])
+    if len(short) > 32:
+        short = short[:30] + "…"
+    slot = time_slot_label(str(row["time_slot"]))
+    xp = activity_xp_badge(row)
+    if is_open:
+        return f"▲ Close · {short}"
+    if row["status"] == "earned":
+        return f"✅ {short} · {slot}"
+    return f"🎯 {short} · {slot} · {xp}"
+
+
 def quest_pick_card_html(row, selected: bool = False) -> str:
     loc = str(row["location"])
     meta = LOCATIONS.get(loc, {})
@@ -3219,6 +3256,63 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
 }
 .cj-quest-pick-slot { font-size: 0.62rem; font-weight: 700; color: var(--dl-muted); }
 
+.cj-quest-day-grid { margin: 0.15rem 0 0.65rem; }
+.cj-quest-day-tile {
+    position: relative;
+    border: 2px solid var(--dl-border); border-radius: 16px 16px 0 0;
+    overflow: hidden; background: white;
+    box-shadow: var(--dl-shadow-sm);
+}
+.cj-quest-day-tile-chip {
+    position: absolute; top: 0.4rem; right: 0.4rem;
+    font-family: Fredoka, sans-serif; font-size: 0.65rem; font-weight: 700;
+    color: #8B6914; background: rgba(255,255,255,0.92);
+    padding: 0.12rem 0.38rem; border-radius: 999px;
+    border: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+.cj-quest-day-tile.earned .cj-quest-day-tile-chip {
+    color: var(--dl-green-dark); background: rgba(240,255,228,0.95);
+}
+.cj-quest-day-tile.selected {
+    border-color: var(--dl-orange);
+    box-shadow: 0 0 0 2px rgba(255,159,67,0.25);
+}
+.cj-quest-day-tile.earned { border-color: rgba(88,204,2,0.45); }
+.cj-quest-day-tile.earned.selected {
+    border-color: var(--dl-green-dark);
+    box-shadow: 0 0 0 2px rgba(88,204,2,0.2);
+}
+.cj-quest-day-tile-img {
+    width: 100%; height: 130px; object-fit: cover; object-position: center top;
+    display: block;
+}
+.cj-quest-day-tile-emoji {
+    height: 130px; display: flex; align-items: center; justify-content: center;
+    font-size: 2.4rem; background: var(--dl-bg-soft);
+}
+div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButton"] {
+    margin-top: -0.35rem;
+    margin-bottom: 0.65rem;
+}
+div[data-testid="stMarkdown"]:has(.cj-quest-day-tile) + div[data-testid="stButton"] button {
+    border-radius: 0 0 14px 14px;
+    border-top: none;
+    min-height: 44px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+.cj-quest-expand-panel {
+    border: 2px solid var(--dl-orange); border-radius: 18px;
+    padding: 0.85rem 0.9rem 0.5rem; margin: 0.35rem 0 0.85rem;
+    background: linear-gradient(180deg, rgba(255,248,225,0.55) 0%, #fff 72%);
+    box-shadow: var(--dl-shadow-sm);
+}
+.cj-quest-expand-panel.done {
+    border-color: rgba(88,204,2,0.55);
+    background: linear-gradient(180deg, rgba(240,255,228,0.65) 0%, #fff 72%);
+}
+
 .cj-polaroid {
     box-shadow: 0 3px 10px rgba(0,0,0,0.22), 0 0 0 2px white, 0 0 0 3px rgba(0,0,0,0.08) !important;
     transform: rotate(-2deg);
@@ -3583,6 +3677,8 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
     .nice-stat-value { font-size: 1.25rem; }
     .cj-quest-pick-tile-img,
     .cj-quest-pick-tile-emoji { height: 150px; }
+    .cj-quest-day-tile-img,
+    .cj-quest-day-tile-emoji { height: 118px; }
     .cj-quest-hero.featured,
     .cj-quest-scene .cj-quest-hero { height: 180px; }
     .cj-qakc-solo.featured { max-width: 100%; height: 220px; }
@@ -8606,19 +8702,17 @@ def day_pending_point_total(day_df: pd.DataFrame) -> float:
     return sum(activity_effective_points(row) for _, row in pending.iterrows())
 
 
-def sync_quest_picker_state(key_prefix: str, day_num: int, pending_keys: list[str]) -> None:
-    """Keep quest picker aligned with pending-only list (drop completed from dropdown)."""
-    pick_key = f"{key_prefix}_active_quest_{day_num}"
-    dropdown_key = f"{key_prefix}_quest_dropdown_{day_num}"
-    if not pending_keys:
-        st.session_state.pop(pick_key, None)
-        st.session_state.pop(dropdown_key, None)
+def sync_open_quest_state(key_prefix: str, day_num: int, quest_keys: list[str]) -> None:
+    """Drop stale open-quest state when the day's quest list changes."""
+    open_key = f"{key_prefix}_open_quest_{day_num}"
+    if not quest_keys:
+        st.session_state.pop(open_key, None)
         return
-    if st.session_state.get(pick_key) not in pending_keys:
-        st.session_state[pick_key] = pending_keys[0]
-        st.session_state.pop(dropdown_key, None)
-    if st.session_state.get(dropdown_key) not in pending_keys:
-        st.session_state.pop(dropdown_key, None)
+    if st.session_state.get(open_key) not in quest_keys:
+        st.session_state.pop(open_key, None)
+    # Legacy picker keys from older UI
+    st.session_state.pop(f"{key_prefix}_active_quest_{day_num}", None)
+    st.session_state.pop(f"{key_prefix}_quest_dropdown_{day_num}", None)
 
 
 def reset_quest_picker_after_complete(activity_key: str) -> None:
@@ -8628,11 +8722,11 @@ def reset_quest_picker_after_complete(activity_key: str) -> None:
         return
     day_num = int(match.iloc[0]["day_num"])
     for prefix in ("calendar", "day"):
-        pick_key = f"{prefix}_active_quest_{day_num}"
-        dropdown_key = f"{prefix}_quest_dropdown_{day_num}"
-        if st.session_state.get(pick_key) == activity_key:
-            st.session_state.pop(pick_key, None)
-        st.session_state.pop(dropdown_key, None)
+        open_key = f"{prefix}_open_quest_{day_num}"
+        if st.session_state.get(open_key) == activity_key:
+            st.session_state.pop(open_key, None)
+        st.session_state.pop(f"{prefix}_active_quest_{day_num}", None)
+        st.session_state.pop(f"{prefix}_quest_dropdown_{day_num}", None)
 
 
 def render_day_quest_nav(
@@ -8644,14 +8738,13 @@ def render_day_quest_nav(
     df: pd.DataFrame | None = None,
     partners_df: pd.DataFrame | None = None,
 ) -> str | None:
-    """Return active_pending_key for the focused quest panel."""
+    """Tile grid for all day quests. Returns open activity_key for expand panel."""
     pending_df = day_df[day_df["status"] == "pending"]
     earned_df = day_df[day_df["status"] == "earned"]
-    pick_key = f"{key_prefix}_active_quest_{day_num}"
-    done_key = f"{key_prefix}_edit_done_{day_num}"
+    open_key = f"{key_prefix}_open_quest_{day_num}"
+    quest_keys = day_df["activity_key"].astype(str).tolist()
     pending_keys = pending_df["activity_key"].astype(str).tolist()
-    earned_keys = earned_df["activity_key"].astype(str).tolist()
-    sync_quest_picker_state(key_prefix, day_num, pending_keys)
+    sync_open_quest_state(key_prefix, day_num, quest_keys)
 
     left_pts = day_pending_point_total(day_df)
     left_label = (
@@ -8684,103 +8777,33 @@ def render_day_quest_nav(
         unsafe_allow_html=True,
     )
 
-    active_pending: str | None = None
-    if pending_keys:
-        if len(pending_keys) >= 6:
-            st.markdown(
-                '<div class="cj-quest-section-label">🎯 Pick a quest to work on</div>',
-                unsafe_allow_html=True,
-            )
-            chosen = st.selectbox(
-                "Quest",
-                pending_keys,
-                index=pending_keys.index(st.session_state[pick_key]),
-                format_func=lambda k: quest_pick_label(day_df, k),
-                key=f"{key_prefix}_quest_dropdown_{day_num}",
-                label_visibility="collapsed",
-            )
-            if chosen != st.session_state[pick_key]:
-                st.session_state[pick_key] = chosen
-                st.session_state.pop(f"{key_prefix}_viewing_done_{day_num}", None)
-                st.rerun()
-            row = pending_df[pending_df["activity_key"] == chosen].iloc[0]
-            st.markdown(quest_pick_tile_html(row, True), unsafe_allow_html=True)
-            active_pending = str(chosen)
-        else:
-            st.markdown(
-                '<div class="cj-quest-section-label">🎯 Pick a quest to work on</div>',
-                unsafe_allow_html=True,
-            )
-            ncols = min(len(pending_keys), 2)
-            cols = st.columns(ncols)
-            for i, key in enumerate(pending_keys):
-                row = pending_df[pending_df["activity_key"] == key].iloc[0]
-                short = str(row["title"])
-                if len(short) > 28:
-                    short = short[:26] + "…"
-                is_sel = st.session_state[pick_key] == key
-                with cols[i % ncols]:
-                    st.markdown(quest_pick_tile_html(row, is_sel), unsafe_allow_html=True)
-                    btn_label = f"{'▶ ' if is_sel else ''}{short}"
-                    if st.button(
-                        btn_label,
-                        key=f"{key_prefix}_jump_{day_num}_{key}",
-                        use_container_width=True,
-                        type="primary" if is_sel else "secondary",
-                    ):
-                        st.session_state[pick_key] = key
-                        st.session_state.pop(f"{key_prefix}_viewing_done_{day_num}", None)
-                        st.rerun()
-            active_pending = str(st.session_state[pick_key])
+    if not quest_keys:
+        return None
 
-    if earned_keys:
-        if done_key not in st.session_state or st.session_state[done_key] not in earned_keys:
-            st.session_state[done_key] = earned_keys[-1]
-        viewing_done = st.session_state.get(f"{key_prefix}_viewing_done_{day_num}")
-        with st.expander(
-            f"✅ Completed ({len(earned_keys)}) — tap to review",
-            expanded=bool(viewing_done),
-        ):
-            if len(earned_keys) >= 4:
-                chosen_done = st.selectbox(
-                    "Completed quest",
-                    earned_keys,
-                    index=earned_keys.index(st.session_state[done_key]),
-                    format_func=lambda k: quest_pick_label(day_df, k),
-                    key=f"{key_prefix}_done_dropdown_{day_num}",
-                    label_visibility="collapsed",
-                )
-                if chosen_done != st.session_state[done_key]:
-                    st.session_state[done_key] = chosen_done
-                    st.session_state[f"{key_prefix}_viewing_done_{day_num}"] = True
-                    st.rerun()
-            else:
-                dcols = st.columns(min(len(earned_keys), 2))
-                for i, key in enumerate(earned_keys):
-                    short = str(earned_df[earned_df["activity_key"] == key].iloc[0]["title"])
-                    if len(short) > 24:
-                        short = short[:22] + "…"
-                    with dcols[i % len(dcols)]:
-                        if st.button(
-                            f"✅ {short}",
-                            key=f"{key_prefix}_view_done_{day_num}_{key}",
-                            use_container_width=True,
-                            type="primary" if st.session_state.get(done_key) == key else "secondary",
-                        ):
-                            st.session_state[done_key] = key
-                            st.session_state[f"{key_prefix}_viewing_done_{day_num}"] = True
-                            st.rerun()
-            if (
-                viewing_done
-                and df is not None
-                and partners_df is not None
-                and st.session_state.get(done_key) in earned_keys
+    st.markdown(
+        '<div class="cj-quest-section-label">🎯 Today\'s quests — tap a tile to complete or edit</div>',
+        unsafe_allow_html=True,
+    )
+    ncols = 2 if len(quest_keys) > 1 else 1
+    cols = st.columns(ncols)
+    for i, key in enumerate(quest_keys):
+        row = day_df[day_df["activity_key"] == key].iloc[0]
+        is_open = st.session_state.get(open_key) == key
+        with cols[i % ncols]:
+            st.markdown(quest_day_tile_html(row, is_open), unsafe_allow_html=True)
+            if st.button(
+                quest_day_tile_button_label(row, is_open),
+                key=f"{key_prefix}_tile_{day_num}_{key}",
+                use_container_width=True,
+                type="primary" if is_open else "secondary",
             ):
-                done_row = day_df[day_df["activity_key"] == st.session_state[done_key]].iloc[0]
-                render_quest_card(done_row, df, focused=False)
-                _render_quest_done_panel(done_row, day_num, key_prefix, partners_df)
+                if is_open:
+                    st.session_state.pop(open_key, None)
+                else:
+                    st.session_state[open_key] = key
+                st.rerun()
 
-    return active_pending
+    return st.session_state.get(open_key)
 
 
 def _render_quest_log_panel(
@@ -9165,7 +9188,7 @@ def render_day_detail(
             unsafe_allow_html=True,
         )
 
-    active_pending = render_day_quest_nav(
+    open_quest = render_day_quest_nav(
         day_df, day_num, key_prefix, target, earned_pts, df, partners_df
     )
 
@@ -9174,19 +9197,27 @@ def render_day_detail(
         df["activity_key"].isin(used_as_sub_keys) & (df["status"] == "pending")
     ]
 
-    if active_pending:
-        pending_rows = day_df[day_df["activity_key"] == active_pending]
-        if pending_rows.empty:
-            st.warning("That quest is no longer pending — pick another above.")
+    if open_quest:
+        open_rows = day_df[day_df["activity_key"] == open_quest]
+        if open_rows.empty:
+            st.warning("That quest is no longer available — pick another tile above.")
         else:
-            row = pending_rows.iloc[0]
-            render_quest_card(row, df, focused=True)
-            maybe_render_quest_quick_complete(
-                row, day_num, key_prefix, partners_df, encounters_df
-            )
-            _render_quest_log_panel(
-                row, df, day_num, key_prefix, partners_df, encounters_df, sub_pool
-            )
+            row = open_rows.iloc[0]
+            is_earned = row["status"] == "earned"
+            with st.container(border=True):
+                if is_earned:
+                    st.markdown(f"**✅ {row['title']}**")
+                    st.caption(str(row["description"]))
+                    _render_quest_done_panel(row, day_num, key_prefix, partners_df)
+                else:
+                    st.markdown(f"**🎯 {row['title']}**")
+                    st.caption(str(row["description"]))
+                    maybe_render_quest_quick_complete(
+                        row, day_num, key_prefix, partners_df, encounters_df
+                    )
+                    _render_quest_log_panel(
+                        row, df, day_num, key_prefix, partners_df, encounters_df, sub_pool
+                    )
 
     if not sub_pool.empty:
         st.markdown("#### Still open after substitutions")
