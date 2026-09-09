@@ -3369,15 +3369,15 @@ div[data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
     height: 100%; border-radius: 999px; background: var(--dl-yellow);
 }
 .cj-rich-cal-day.hero {
-    min-height: 200px;
-    margin: 0.35rem 0 0.65rem;
+    min-height: 118px;
+    margin: 0.35rem 0 0.5rem;
     border-radius: 18px;
     box-shadow: 0 6px 20px rgba(0,0,0,0.15);
 }
 .cj-rich-cal-day.hero .cj-rich-cal-num { font-size: 2.2rem; }
 .cj-rich-cal-day.hero .cj-rich-cal-daylabel { font-size: 0.72rem; }
-.cj-rich-cal-day.hero .cj-rich-cal-icons { font-size: 0.85rem; min-height: 1.25rem; }
-.cj-rich-cal-day.hero .cj-rich-cal-prog { height: 6px; margin-top: 0.4rem; }
+.cj-rich-cal-day.hero .cj-rich-cal-icons { font-size: 0.85rem; min-height: 1.1rem; margin-top: 0.35rem; }
+.cj-rich-cal-day.hero .cj-rich-cal-prog { height: 6px; margin-top: 0.35rem; }
 .cj-rich-cal-kicker {
     font-family: Fredoka, sans-serif;
     font-size: 1.05rem;
@@ -8089,6 +8089,7 @@ def rich_cal_day_card_html(
     *,
     day_title: str = "",
     is_today: bool = False,
+    venue_hint: str = "",
 ) -> str:
     gs = summary.get("goal_status", "pending")
     css = ["cj-rich-cal-day"]
@@ -8124,23 +8125,30 @@ def rich_cal_day_card_html(
         }.get(gs, f"{pct}% in progress")
         act_done = summary.get("act_done", 0)
         act_total = summary.get("act_total", 0)
+        venue_bit = f" · 📍 {venue_hint}" if venue_hint else ""
         hero_header = (
             f'<div class="cj-rich-cal-kicker">{today_mark}Day {day_num} — {day_title}</div>'
-            f'<div class="cj-rich-cal-meta">{cal_date.strftime("%A, %B %d")} · '
-            f"{status_txt} · {act_done}/{act_total} quests</div>"
+            f'<div class="cj-rich-cal-meta">{cal_date.strftime("%A, %B %d")}{venue_bit} · '
+            f'{status_txt} · {act_done}/{act_total} quests</div>'
         )
-    day_label = "" if hero_header else f'<div class="cj-rich-cal-daylabel">Day {day_num}</div>'
+    inner_parts = []
+    if hero_header:
+        inner_parts.append(hero_header)
+    else:
+        inner_parts.append(f'<div class="cj-rich-cal-num">{cal_date.day}</div>')
+        inner_parts.append(f'<div class="cj-rich-cal-daylabel">Day {day_num}</div>')
+    inner_parts.extend(
+        [
+            f'<div class="cj-rich-cal-icons">{icon_line}</div>',
+            f'<div class="cj-rich-cal-prog"><div style="width:{pct}%;"></div></div>',
+        ]
+    )
+    inner_html = "".join(inner_parts)
     return f"""
 <div class="{' '.join(css)}">
   {bg_html}
   <div class="cj-rich-cal-scrim"></div>
-  <div class="cj-rich-cal-inner">
-    {hero_header}
-    <div class="cj-rich-cal-num">{cal_date.day}</div>
-    {day_label}
-    <div class="cj-rich-cal-icons">{icon_line}</div>
-    <div class="cj-rich-cal-prog"><div style="width:{pct}%;"></div></div>
-  </div>
+  <div class="cj-rich-cal-inner">{inner_html}</div>
 </div>
 """
 
@@ -8396,6 +8404,14 @@ def render_calendar_view(
     summary = summaries[pick - 1]
     cal_date = journey_date(settings, pick)
     day_title = day_plan_meta(pick)["title"]
+    plan = day_path_visual_plan(df, pick)
+    venue_hint = ""
+    if plan.get("banner"):
+        lead = plan["banner"]
+        venue_hint = str(lead.get("label") or lead.get("location") or "")
+        extra = len(plan.get("all") or []) - 1
+        if extra > 0:
+            venue_hint = f"{venue_hint} +{extra} more"
 
     if not is_today:
         if st.button("← Today", key="cal_back_today", use_container_width=True):
@@ -8412,11 +8428,11 @@ def render_calendar_view(
             hero=True,
             day_title=day_title,
             is_today=is_today,
+            venue_hint=venue_hint,
         ),
         unsafe_allow_html=True,
     )
 
-    st.markdown(day_venue_banner_html(df, pick), unsafe_allow_html=True)
     st.markdown(
         day_venue_strip_html(df, pick, max_icons=6, size=36),
         unsafe_allow_html=True,
