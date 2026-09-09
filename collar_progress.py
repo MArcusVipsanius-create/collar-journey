@@ -6105,12 +6105,17 @@ def _save_pil_to_media_file(path: Path, image) -> None:
         save_kwargs = {"quality": 92, "optimize": True}
     elif ext == ".webp":
         save_kwargs = {"quality": 92}
-    fmt = ext.lstrip(".").upper()
-    if fmt == "JPG":
+    if ext in (".jpg", ".jpeg"):
         fmt = "JPEG"
-    with Image.open(path) as original:
-        file_fmt = original.format or fmt
-    out.save(path, format=file_fmt, **save_kwargs)
+    elif ext == ".webp":
+        fmt = "WEBP"
+    elif ext == ".png":
+        fmt = "PNG"
+    else:
+        fmt = ext.lstrip(".").upper()
+        if fmt == "JPG":
+            fmt = "JPEG"
+    out.save(path, format=fmt, **save_kwargs)
 
 
 def rotate_journey_media(media_id: str, direction: str) -> tuple[bool, str]:
